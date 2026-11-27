@@ -51,7 +51,7 @@ WHERE is_active
 
 ## Миграции и права доступа
 
-В Compose `shopping_migrator` применяет миграции, а `shopping_app` получает `SELECT` на четыре таблицы каталога. При развёртывании вне Compose роль `shopping_app` должна существовать до применения `0002`. Миграция не заполняет таблицы данными.
+В Compose `shopping_migrator` применяет миграции, а `shopping_app` получает `SELECT` на четыре таблицы каталога. При развёртывании вне Compose роль `shopping_app` должна существовать до применения `0002`. Для загрузки данных после миграции используйте [генератор каталога](catalog.md).
 
 ```bash
 docker compose run --rm migrate alembic current

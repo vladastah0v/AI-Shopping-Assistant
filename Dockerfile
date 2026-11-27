@@ -15,6 +15,7 @@ RUN groupadd --gid 10001 shopping && \
     useradd --uid 10001 --gid 10001 --no-create-home --no-log-init --shell /usr/sbin/nologin shopping
 COPY --from=dependencies /service/.venv ./.venv
 COPY app ./app
+COPY scripts ./scripts
 COPY alembic.ini ./
 COPY migrations ./migrations
 USER 10001:10001

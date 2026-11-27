@@ -1,5 +1,3 @@
-import os
-from collections.abc import AsyncIterator
 from datetime import timedelta
 from decimal import Decimal
 from uuid import uuid4
@@ -8,29 +6,12 @@ import pytest
 import pytest_asyncio
 from sqlalchemy import Numeric, delete, insert, select, text, update
 from sqlalchemy.exc import DBAPIError, IntegrityError
-from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
+from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
-from sqlalchemy.pool import NullPool
 
 from app.modules.catalog.models import Brand, Category, DocumentType, Product, ProductDocument
 
-database_url = os.environ.get("SHOPPING_TEST_DATABASE_URL")
-pytestmark = [
-    pytest.mark.asyncio,
-    pytest.mark.skipif(
-        not database_url, reason="SHOPPING_TEST_DATABASE_URL is required for catalog schema tests"
-    ),
-]
-
-
-@pytest_asyncio.fixture
-async def session() -> AsyncIterator[AsyncSession]:
-    engine = create_async_engine(database_url, poolclass=NullPool, connect_args={"timeout": 5})
-    try:
-        async with AsyncSession(engine, expire_on_commit=False) as session:
-            yield session
-    finally:
-        await engine.dispose()
+pytestmark = pytest.mark.asyncio
 
 
 @pytest_asyncio.fixture
