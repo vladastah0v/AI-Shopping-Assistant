@@ -1,0 +1,79 @@
+name: ai-shopping-assistant
+
+x-app-service: &app-service
+  image: ai-shopping-assistant:local
+  pull_policy: never
+  init: true
+  read_only: true
+  cap_drop: [ALL]
+  security_opt: ["no-new-privileges:true"]
+
+x-app-environment: &app-environment
+  SHOPPING_POSTGRES_HOST: postgres
+  SHOPPING_POSTGRES_DB: shopping_assistant
+  SHOPPING_REDIS_URL: redis://redis:6379/0
+  SHOPPING_DEPENDENCY_TIMEOUT_SECONDS: ${SHOPPING_DEPENDENCY_TIMEOUT_SECONDS:-2}
+
+services:
+  api:
+    <<: *app-service
+    build: .
+    environment:
+      <<: *app-environment
+      SHOPPING_POSTGRES_USER: shopping_app
+      SHOPPING_POSTGRES_PASSWORD: ${SHOPPING_POSTGRES_PASSWORD:?Set SHOPPING_POSTGRES_PASSWORD in .env}
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+    ports:
+      - "127.0.0.1:${API_PORT:-8000}:8000"
+    healthcheck:
+      test: ["CMD", "python", "-c", "from urllib.request import urlopen; urlopen('http://127.0.0.1:8000/health/ready', timeout=3).close()"]
+      interval: 5s
+      timeout: 4s
+      retries: 5
+      start_period: 5s
+
+  migrate:
+    <<: *app-service
+    command: ["alembic", "upgrade", "head"]
+    environment:
+      <<: *app-environment
+      SHOPPING_POSTGRES_USER: shopping_migrator
+      SHOPPING_POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  postgres:
+    image: pgvector/pgvector:0.8.7-pg16-bookworm
+    environment:
+      POSTGRES_DB: shopping_assistant
+      POSTGRES_USER: shopping_migrator
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
+      SHOPPING_POSTGRES_PASSWORD: ${SHOPPING_POSTGRES_PASSWORD:?Set SHOPPING_POSTGRES_PASSWORD in .env}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./infra/postgres/01-create-app-role.sh:/docker-entrypoint-initdb.d/01-create-app-role.sh:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U \"$$POSTGRES_USER\" -d \"$$POSTGRES_DB\""]
+      interval: 3s
+      timeout: 3s
+      retries: 10
+      start_period: 5s
+
+  redis:
+    image: redis:7.4-alpine
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 3s
+      timeout: 3s
+      retries: 10
+
+volumes:
+  postgres_data:
+  redis_data:
