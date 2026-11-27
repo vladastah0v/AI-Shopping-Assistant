@@ -10,6 +10,7 @@ from app.ai.llm.provider import ChatMessage, LLMError, LLMProvider
 from app.ai.prompts.rag import RAG_PROMPT
 from app.ai.rag.retrieval import RagContext, RagRetriever
 from app.ai.rag.schemas import AnswerMetadata, AnswerPlan, RagAnswer
+from app.ai.tools.catalog import CatalogTools, ToolError, route_lookup
 from app.modules.catalog.schemas import ProductRead
 
 _CONTEXT_LIMIT = 8_000
@@ -74,8 +75,11 @@ class RagService:
     def __init__(self, retriever: RagRetriever, provider: LLMProvider | None) -> None:
         self.retriever = retriever
         self.provider = provider
+        self.tools = CatalogTools(retriever.search)
 
-    async def answer(self, session: AsyncSession, request: IntentQuery) -> RagAnswer:
+    async def answer(
+        self, session: AsyncSession, request: IntentQuery, *, product_ids: list[UUID] | None = None
+    ) -> RagAnswer:
         if request.intent in _STATIC_ANSWERS:
             return RagAnswer(
                 answer=_STATIC_ANSWERS[request.intent],
@@ -83,7 +87,22 @@ class RagService:
                 clarification_required=request.intent == Intent.CLARIFICATION,
             )
         started = perf_counter()
-        context = await self.retriever.retrieve(session, request)
+        lookup = route_lookup(request, product_ids or [])
+        if lookup is None:
+            context = await self.retriever.retrieve(session, request)
+        else:
+            try:
+                result = (await self.tools.execute(session, [lookup]))[0]
+            except ToolError:
+                return RagAnswer(
+                    answer="Уточните, какие товары нужно проверить.",
+                    intent=request.intent,
+                    clarification_required=True,
+                )
+            context = RagContext(
+                products=result.products,
+                evidence=await self.retriever.retrieve_evidence(session, request, result.products),
+            )
         return await self.respond(request, context, (perf_counter() - started) * 1000)
 
     async def respond(
