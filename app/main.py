@@ -13,10 +13,12 @@ from app.ai.llm.ollama import OllamaProvider
 from app.ai.llm.provider import LLMProvider
 from app.ai.rag.retrieval import RagRetriever
 from app.ai.rag.service import RagService
+from app.core.cache import RedisCache
 from app.core.config import Settings
 from app.core.database import create_database_engine
 from app.core.http import RequestLimitMiddleware
 from app.core.redis import create_redis_client
+from app.core.traffic import TrafficLimiter, TrafficMiddleware
 from app.health import router as health_router
 from app.modules.catalog.router import router as catalog_router
 from app.modules.chat.router import router as chat_router
@@ -48,7 +50,11 @@ def create_app(
             if active_embeddings is None and config.semantic_search_enabled:
                 active_embeddings = EmbeddingService(SentenceTransformersProvider())
             application.state.product_search = ProductSearch(
-                active_embeddings, embedding_timeout=config.embedding_timeout_seconds
+                active_embeddings,
+                embedding_timeout=config.embedding_timeout_seconds,
+                cache=RedisCache(redis_client) if config.cache_enabled else None,
+                search_ttl=config.search_cache_ttl_seconds,
+                vector_ttl=config.embedding_cache_ttl_seconds,
             )
             active_llm = llm
             if active_llm is None and config.ollama_enabled:
@@ -78,6 +84,12 @@ def create_app(
                 + 2 * config.ollama_generation_timeout_seconds
                 + 2 * config.embedding_timeout_seconds
             )
+            application.state.traffic = TrafficLimiter(
+                redis_client,
+                per_minute=config.api_requests_per_minute,
+                concurrency=config.active_ai_requests,
+                lease_seconds=int(application.state.chat_timeout) + 5,
+            )
             yield
 
     application = FastAPI(
@@ -86,6 +98,7 @@ def create_app(
         version="0.1.0",
         lifespan=lifespan,
     )
+    application.add_middleware(TrafficMiddleware)
     application.add_middleware(RequestLimitMiddleware)
 
     @application.exception_handler(RequestValidationError)

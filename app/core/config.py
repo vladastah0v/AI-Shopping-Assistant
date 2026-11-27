@@ -37,6 +37,12 @@ class Settings(BaseSettings):
     chat_session_ttl_seconds: int = Field(default=86400, ge=60, le=604800)
     chat_history_limit: int = Field(default=12, ge=2, le=50)
 
+    cache_enabled: bool = True
+    search_cache_ttl_seconds: int = Field(default=60, ge=1, le=3600)
+    embedding_cache_ttl_seconds: int = Field(default=900, ge=1, le=86400)
+    api_requests_per_minute: int = Field(default=120, ge=1, le=10000)
+    active_ai_requests: int = Field(default=4, ge=1, le=64)
+
     @property
     def database_url(self) -> URL:
         return URL.create(

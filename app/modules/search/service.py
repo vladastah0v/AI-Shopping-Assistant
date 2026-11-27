@@ -1,14 +1,18 @@
 import asyncio
+import json
 import logging
 from uuid import UUID
 
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.ai.embeddings.service import EmbeddingService, Vector
+from app.ai.embeddings.service import EmbeddingService, Vector, validate_vector
 from app.ai.retrieval.fusion import reciprocal_rank_fusion
 from app.ai.retrieval.keyword import search_products_by_keywords
 from app.ai.retrieval.vector import VectorSearchOptions, search_product_vectors
+from app.core.cache import RedisCache, cache_key
 from app.modules.catalog.repository import get_products_by_id
+from app.modules.catalog.revision import CatalogRevision
 from app.modules.catalog.schemas import ProductRead
 from app.modules.search.schemas import RankedProduct, SearchRequest, SearchResponse, SearchStrategy
 
@@ -20,13 +24,41 @@ class EmbeddingsUnavailable(Exception):
 
 
 class ProductSearch:
-    def __init__(self, embeddings: EmbeddingService | None, *, embedding_timeout: float = 8):
+    def __init__(
+        self,
+        embeddings: EmbeddingService | None,
+        *,
+        embedding_timeout: float = 8,
+        cache: RedisCache | None = None,
+        search_ttl: int = 60,
+        vector_ttl: int = 900,
+    ):
         self.embeddings = embeddings
         self.embedding_timeout = embedding_timeout
+        self.cache = cache
+        self.search_ttl = search_ttl
+        self.vector_ttl = vector_ttl
         self._embedding_slot = asyncio.Semaphore(1)
         self._embedding_task: asyncio.Task[Vector] | None = None
 
     async def search(
+        self, session: AsyncSession, request: SearchRequest, strategy: SearchStrategy
+    ) -> SearchResponse:
+        if self.cache is None:
+            return await self._search(session, request, strategy)
+        revision = await session.scalar(select(CatalogRevision.version))
+        space = self.embeddings.space if self.embeddings is not None else None
+        key = cache_key("search:v1", f"{revision}:{space}:{strategy}:{request.model_dump_json()}")
+        return await self.cache.fetch(
+            key,
+            ttl=self.search_ttl,
+            decode=SearchResponse.model_validate_json,
+            encode=lambda result: result.model_dump_json(),
+            compute=lambda: self._search(session, request, strategy),
+            cacheable=lambda result: result.applied_strategy == strategy,
+        )
+
+    async def _search(
         self, session: AsyncSession, request: SearchRequest, strategy: SearchStrategy
     ) -> SearchResponse:
         applied = strategy
@@ -84,6 +116,21 @@ class ProductSearch:
     async def query_vector(self, query: str) -> Vector:
         if self.embeddings is None:
             raise EmbeddingsUnavailable("Семантический поиск недоступен.")
+        if self.cache is None:
+            return await self._compute_vector(query)
+        space = self.embeddings.space
+        normalized = " ".join(query.split())
+        key = cache_key("embeddings:v1", f"{space}:{normalized}")
+        return await self.cache.fetch(
+            key,
+            ttl=self.vector_ttl,
+            decode=lambda raw: validate_vector(json.loads(raw), space.dimensions),
+            encode=json.dumps,
+            compute=lambda: self._compute_vector(normalized),
+        )
+
+    async def _compute_vector(self, query: str) -> Vector:
+        assert self.embeddings is not None
         try:
             async with asyncio.timeout(self.embedding_timeout):
                 await self._embedding_slot.acquire()

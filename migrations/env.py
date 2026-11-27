@@ -9,6 +9,7 @@ from sqlalchemy.pool import NullPool
 from app.ai.embeddings import models as embedding_models  # noqa: F401 -- Register embedding tables.
 from app.core.config import Settings
 from app.modules.catalog import models as catalog_models
+from app.modules.catalog import revision as catalog_revision  # noqa: F401 -- Register catalog revision.
 from app.modules.chat import models as chat_models  # noqa: F401 -- Register conversation tables.
 
 config = context.config
