@@ -7,6 +7,8 @@ from secrets import token_hex
 from redis.asyncio import Redis
 from redis.exceptions import RedisError
 
+from app.core.observability import CACHE_HITS, CACHE_MISSES
+
 logger = logging.getLogger(__name__)
 _RELEASE = """
 if redis.call('GET', KEYS[1]) == ARGV[1] then
@@ -34,6 +36,8 @@ class RedisCache:
         compute: Callable[[], Awaitable[T]],
         cacheable: Callable[[T], bool] = lambda _: True,
     ) -> T:
+        namespace = key.split(":", 2)[1]
+        namespace = namespace if namespace in {"search", "embeddings"} else "other"
         lock = f"{key}:lock"
         token = token_hex(16)
         acquired = False
@@ -42,7 +46,9 @@ class RedisCache:
                 raw = await self.redis.get(key)
                 if raw is not None:
                     try:
-                        return decode(raw)
+                        result = decode(raw)
+                        CACHE_HITS.labels(namespace).inc()
+                        return result
                     except (ValueError, TypeError):
                         break
                 if await self.redis.set(lock, token, ex=30, nx=True):
@@ -52,7 +58,9 @@ class RedisCache:
                         try:
                             await self.redis.eval(_RELEASE, 1, lock, token)
                             acquired = False
-                            return decode(raw)
+                            result = decode(raw)
+                            CACHE_HITS.labels(namespace).inc()
+                            return result
                         except (ValueError, TypeError):
                             break
                     break
@@ -62,6 +70,7 @@ class RedisCache:
             logger.debug("Redis cache read failed")
 
         try:
+            CACHE_MISSES.labels(namespace).inc()
             result = await compute()
             if acquired and cacheable(result):
                 try:

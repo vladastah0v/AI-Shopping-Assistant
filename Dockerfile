@@ -25,7 +25,7 @@ RUN groupadd --gid 10001 shopping && \
     useradd --uid 10001 --gid 10001 --no-create-home --no-log-init --shell /usr/sbin/nologin shopping
 USER 10001:10001
 EXPOSE 8000
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--no-access-log"]
 
 FROM runtime AS embeddings
 USER root

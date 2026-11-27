@@ -9,6 +9,7 @@ from fastapi.responses import JSONResponse
 from app.ai.embeddings.huggingface import SentenceTransformersProvider
 from app.ai.embeddings.service import EmbeddingService
 from app.ai.intent import IntentResolver
+from app.ai.llm.observed import ObservedLLM
 from app.ai.llm.ollama import OllamaProvider
 from app.ai.llm.provider import LLMProvider
 from app.ai.rag.retrieval import RagRetriever
@@ -17,6 +18,7 @@ from app.core.cache import RedisCache
 from app.core.config import Settings
 from app.core.database import create_database_engine
 from app.core.http import RequestLimitMiddleware
+from app.core.observability import MetricsMiddleware, configure_logging, metrics_endpoint
 from app.core.redis import create_redis_client
 from app.core.traffic import TrafficLimiter, TrafficMiddleware
 from app.health import router as health_router
@@ -36,6 +38,7 @@ def create_app(
 ) -> FastAPI:
     @asynccontextmanager
     async def lifespan(application: FastAPI) -> AsyncIterator[None]:
+        configure_logging()
         config = settings if settings is not None else Settings()
         async with AsyncExitStack() as resources:
             engine = create_database_engine(config)
@@ -69,6 +72,8 @@ def create_app(
                     )
                 )
                 active_llm = OllamaProvider(config, ollama_http)
+            if active_llm is not None:
+                active_llm = ObservedLLM(active_llm)
             application.state.llm = active_llm
             application.state.chat = ChatService(
                 SessionStore(
@@ -100,6 +105,13 @@ def create_app(
     )
     application.add_middleware(TrafficMiddleware)
     application.add_middleware(RequestLimitMiddleware)
+    application.add_middleware(MetricsMiddleware)
+    application.add_api_route(
+        "/metrics",
+        metrics_endpoint,
+        summary="Получить метрики Prometheus",
+        tags=["Состояние сервиса"],
+    )
 
     @application.exception_handler(RequestValidationError)
     async def invalid_input(_: Request, error: RequestValidationError) -> JSONResponse:

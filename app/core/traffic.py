@@ -6,6 +6,8 @@ from redis.exceptions import RedisError
 from starlette.responses import JSONResponse
 from starlette.types import ASGIApp, Receive, Scope, Send
 
+from app.core.observability import ACTIVE_AI, REJECTED_AI
+
 _WINDOW = """
 local count = redis.call('INCR', KEYS[1])
 if count == 1 then redis.call('EXPIRE', KEYS[1], 60) end
@@ -88,12 +90,17 @@ class TrafficMiddleware:
             if chat:
                 error = JSONResponse({"detail": "Консультант временно недоступен."}, 503)
         if error is not None:
+            if chat:
+                REJECTED_AI.labels(error.status_code).inc()
             await error(scope, receive, send)
             return
+        if active:
+            ACTIVE_AI.inc()
         try:
             await self.app(scope, receive, send)
         finally:
             if active:
+                ACTIVE_AI.dec()
                 try:
                     await limiter.release(lease)
                 except RedisError:

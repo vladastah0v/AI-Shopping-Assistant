@@ -18,6 +18,7 @@ from app.ai.tools.catalog import (
     ToolError,
     route_lookup,
 )
+from app.core.observability import INVALID_AI, RETRIEVAL_SECONDS
 from app.modules.catalog.schemas import ProductRead
 
 _CONTEXT_LIMIT = 8_000
@@ -129,7 +130,9 @@ class RagService:
                 products=result.products,
                 evidence=await self.retriever.retrieve_evidence(session, request, result.products),
             )
-        return await self.respond(request, context, (perf_counter() - started) * 1000)
+        elapsed = perf_counter() - started
+        RETRIEVAL_SECONDS.labels("rag").observe(elapsed)
+        return await self.respond(request, context, elapsed * 1000)
 
     async def respond(
         self, request: IntentQuery, context: RagContext, retrieval_ms: float = 0
@@ -173,8 +176,10 @@ class RagService:
                     emphasis = plan.emphasis
                 metadata.model = self.provider.model
                 metadata.mode = "model"
-            except (LLMError, ValidationError, ValueError):
+            except LLMError:
                 pass
+            except (ValidationError, ValueError):
+                INVALID_AI.labels("rag").inc()
             metadata.generation_duration_ms = (perf_counter() - started) * 1000
         recommendations = []
         if request.intent in (Intent.PRODUCT_SEARCH, Intent.RECOMMENDATION):

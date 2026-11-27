@@ -8,6 +8,7 @@ from pydantic import BaseModel, StrictBool
 
 from app.ai.llm.provider import ChatMessage, LLMInvalidResponse, LLMUnavailable
 from app.core.config import Settings
+from app.core.observability import LLM_TOKENS
 
 
 class _Message(BaseModel):
@@ -18,6 +19,8 @@ class _Chunk(BaseModel):
     message: _Message
     done: StrictBool
     done_reason: str | None = None
+    prompt_eval_count: int | None = None
+    eval_count: int | None = None
 
 
 class _Model(BaseModel):
@@ -70,6 +73,7 @@ class OllamaProvider:
                         response.raise_for_status()
                         chunk = _Chunk.model_validate_json(response.content)
                         if chunk.done and chunk.done_reason != "length" and chunk.message.content:
+                            self._observe_tokens(chunk)
                             return chunk.message.content
                         raise LLMInvalidResponse("Модель не завершила ответ.")
                     except _TRANSIENT:
@@ -105,12 +109,19 @@ class OllamaProvider:
                     if chunk.message.content:
                         yield chunk.message.content
                     if chunk.done:
+                        self._observe_tokens(chunk)
                         return
         except (httpx.HTTPError, TimeoutError) as error:
             raise LLMUnavailable("Языковая модель временно недоступна.") from error
         except ValueError as error:
             raise LLMInvalidResponse("Ответ языковой модели не распознан.") from error
         raise LLMInvalidResponse("Модель не завершила поток ответа.")
+
+    @staticmethod
+    def _observe_tokens(chunk: _Chunk) -> None:
+        for direction, count in (("input", chunk.prompt_eval_count), ("output", chunk.eval_count)):
+            if count is not None and count >= 0:
+                LLM_TOKENS.labels(direction).inc(count)
 
     def _payload(
         self, messages: Sequence[ChatMessage], schema: dict | None, *, stream: bool

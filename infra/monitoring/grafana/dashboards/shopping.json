@@ -1,0 +1,241 @@
+{
+  "uid": "shopping-assistant",
+  "title": "AI Shopping Assistant",
+  "schemaVersion": 40,
+  "refresh": "10s",
+  "time": {
+    "from": "now-1h",
+    "to": "now"
+  },
+  "panels": [
+    {
+      "id": 1,
+      "type": "timeseries",
+      "title": "Запросы API в секунду",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "shopping-prometheus"
+      },
+      "gridPos": {
+        "h": 7,
+        "w": 12,
+        "x": 0,
+        "y": 0
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (route) (rate(shopping_http_requests_total[5m]))",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "shopping-prometheus"
+          }
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "type": "timeseries",
+      "title": "Ошибки API",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "shopping-prometheus"
+      },
+      "gridPos": {
+        "h": 7,
+        "w": 12,
+        "x": 12,
+        "y": 0
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (status) (rate(shopping_http_errors_total[5m]))",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "shopping-prometheus"
+          }
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "type": "timeseries",
+      "title": "Задержка API p95, с",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "shopping-prometheus"
+      },
+      "gridPos": {
+        "h": 7,
+        "w": 12,
+        "x": 0,
+        "y": 7
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "histogram_quantile(0.95, sum by (le, route) (rate(shopping_http_request_duration_seconds_bucket[5m])))",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "shopping-prometheus"
+          }
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "type": "timeseries",
+      "title": "Задержка LLM p95, с",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "shopping-prometheus"
+      },
+      "gridPos": {
+        "h": 7,
+        "w": 12,
+        "x": 12,
+        "y": 7
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "histogram_quantile(0.95, sum by (le, mode) (rate(shopping_llm_generation_duration_seconds_bucket[5m])))",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "shopping-prometheus"
+          }
+        }
+      ]
+    },
+    {
+      "id": 5,
+      "type": "timeseries",
+      "title": "Задержка поиска p95, с",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "shopping-prometheus"
+      },
+      "gridPos": {
+        "h": 7,
+        "w": 12,
+        "x": 0,
+        "y": 14
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "histogram_quantile(0.95, sum by (le, strategy) (rate(shopping_retrieval_duration_seconds_bucket[5m])))",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "shopping-prometheus"
+          }
+        }
+      ]
+    },
+    {
+      "id": 6,
+      "type": "timeseries",
+      "title": "Попадания и промахи Redis",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "shopping-prometheus"
+      },
+      "gridPos": {
+        "h": 7,
+        "w": 12,
+        "x": 12,
+        "y": 14
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (namespace) (rate(shopping_cache_hits_total[5m]))",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "shopping-prometheus"
+          },
+          "legendFormat": "Попадания {{namespace}}"
+        },
+        {
+          "refId": "B",
+          "expr": "sum by (namespace) (rate(shopping_cache_misses_total[5m]))",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "shopping-prometheus"
+          },
+          "legendFormat": "Промахи {{namespace}}"
+        }
+      ]
+    },
+    {
+      "id": 7,
+      "type": "timeseries",
+      "title": "Активные запросы консультанта",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "shopping-prometheus"
+      },
+      "gridPos": {
+        "h": 7,
+        "w": 12,
+        "x": 0,
+        "y": 21
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(shopping_active_ai_requests)",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "shopping-prometheus"
+          }
+        }
+      ]
+    },
+    {
+      "id": 8,
+      "type": "timeseries",
+      "title": "Отказы модели и проверки ответа",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "shopping-prometheus"
+      },
+      "gridPos": {
+        "h": 7,
+        "w": 12,
+        "x": 12,
+        "y": 21
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(rate(shopping_llm_failures_total[5m]))",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "shopping-prometheus"
+          },
+          "legendFormat": "Провайдер"
+        },
+        {
+          "refId": "B",
+          "expr": "sum(rate(shopping_invalid_ai_responses_total[5m]))",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "shopping-prometheus"
+          },
+          "legendFormat": "Проверка ответа"
+        },
+        {
+          "refId": "C",
+          "expr": "sum(rate(shopping_rejected_ai_requests_total[5m]))",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "shopping-prometheus"
+          },
+          "legendFormat": "Лимиты"
+        }
+      ]
+    }
+  ]
+}

@@ -10,6 +10,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.ai.intent import Intent, IntentQuery
+from app.core.observability import TOOL_FAILURES, TOOL_SECONDS
 from app.modules.catalog.models import Category
 from app.modules.catalog.repository import get_products_by_id, list_products
 from app.modules.catalog.schemas import CategoryRead, ProductFilters, ProductQuery, ProductRead
@@ -99,7 +100,11 @@ class CatalogTools:
                     started = perf_counter()
                     try:
                         results.append(await self._dispatch(session, call))
+                    except Exception:
+                        TOOL_FAILURES.labels(call.name).inc()
+                        raise
                     finally:
+                        TOOL_SECONDS.labels(call.name).observe(perf_counter() - started)
                         logger.info(
                             "Catalog tool completed",
                             extra={

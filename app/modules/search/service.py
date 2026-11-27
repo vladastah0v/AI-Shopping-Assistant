@@ -11,6 +11,7 @@ from app.ai.retrieval.fusion import reciprocal_rank_fusion
 from app.ai.retrieval.keyword import search_products_by_keywords
 from app.ai.retrieval.vector import VectorSearchOptions, search_product_vectors
 from app.core.cache import RedisCache, cache_key
+from app.core.observability import EMBEDDING_SECONDS, RETRIEVAL_SECONDS
 from app.modules.catalog.repository import get_products_by_id
 from app.modules.catalog.revision import CatalogRevision
 from app.modules.catalog.schemas import ProductRead
@@ -42,6 +43,12 @@ class ProductSearch:
         self._embedding_task: asyncio.Task[Vector] | None = None
 
     async def search(
+        self, session: AsyncSession, request: SearchRequest, strategy: SearchStrategy
+    ) -> SearchResponse:
+        with RETRIEVAL_SECONDS.labels(strategy).time():
+            return await self._search_with_cache(session, request, strategy)
+
+    async def _search_with_cache(
         self, session: AsyncSession, request: SearchRequest, strategy: SearchStrategy
     ) -> SearchResponse:
         if self.cache is None:
@@ -134,11 +141,16 @@ class ProductSearch:
         try:
             async with asyncio.timeout(self.embedding_timeout):
                 await self._embedding_slot.acquire()
-                self._embedding_task = asyncio.create_task(self.embeddings.encode_query(query))
+                self._embedding_task = asyncio.create_task(self._timed_embedding(query))
                 self._embedding_task.add_done_callback(self._release_embedding_slot)
                 return await asyncio.shield(self._embedding_task)
         except (RuntimeError, ValueError, TimeoutError) as error:
             raise EmbeddingsUnavailable("Семантический поиск недоступен.") from error
+
+    async def _timed_embedding(self, query: str) -> Vector:
+        assert self.embeddings is not None
+        with EMBEDDING_SECONDS.time():
+            return await self.embeddings.encode_query(query)
 
     def _release_embedding_slot(self, task: asyncio.Task[Vector]) -> None:
         self._embedding_slot.release()
