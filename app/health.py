@@ -46,3 +46,15 @@ async def readiness(request: Request, response: Response) -> ReadinessResponse:
 
     response.status_code = status.HTTP_503_SERVICE_UNAVAILABLE
     return ReadinessResponse(status="not_ready", postgres=postgres_ready, redis=redis_ready)
+
+
+class AIHealthResponse(BaseModel):
+    status: Literal["ready", "disabled", "unavailable"]
+
+
+@router.get("/ai", summary="Проверить доступность настроенной модели Ollama")
+async def ai_readiness(request: Request) -> AIHealthResponse:
+    llm = request.app.state.llm
+    if llm is None:
+        return AIHealthResponse(status="disabled")
+    return AIHealthResponse(status="ready" if await llm.available() else "unavailable")

@@ -1,0 +1,22 @@
+services:
+  api:
+    environment:
+      SHOPPING_OLLAMA_ENABLED: "true"
+      SHOPPING_OLLAMA_URL: http://ollama:11434
+  ollama:
+    profiles: [llm]
+    image: ${OLLAMA_IMAGE:-ollama/ollama:0.13.5}
+    environment:
+      OLLAMA_NO_CLOUD: "1"
+      OLLAMA_NUM_PARALLEL: ${SHOPPING_OLLAMA_CONCURRENCY:-1}
+      OLLAMA_MAX_LOADED_MODELS: "1"
+    volumes:
+      - ollama_models:/root/.ollama
+    healthcheck:
+      test: ["CMD", "ollama", "list"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+
+volumes:
+  ollama_models:

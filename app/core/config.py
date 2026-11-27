@@ -1,4 +1,4 @@
-from pydantic import Field, RedisDsn, SecretStr
+from pydantic import AnyHttpUrl, Field, RedisDsn, SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from sqlalchemy import URL
 
@@ -22,6 +22,17 @@ class Settings(BaseSettings):
 
     semantic_search_enabled: bool = False
     embedding_timeout_seconds: float = Field(default=8, gt=0, le=60)
+
+    ollama_enabled: bool = False
+    ollama_url: AnyHttpUrl = AnyHttpUrl("http://127.0.0.1:11434")
+    ollama_model: str = Field(default="qwen2.5:1.5b", min_length=1, max_length=160)
+    ollama_connection_timeout_seconds: float = Field(default=2, gt=0, le=15)
+    ollama_generation_timeout_seconds: float = Field(default=45, gt=0, le=180)
+    ollama_retries: int = Field(default=1, ge=0, le=2)
+    ollama_concurrency: int = Field(default=1, ge=1, le=8)
+    ollama_temperature: float = Field(default=0.1, ge=0, le=1)
+    ollama_max_tokens: int = Field(default=512, ge=32, le=4096)
+    ollama_context_tokens: int = Field(default=4096, ge=2048, le=32768)
 
     @property
     def database_url(self) -> URL:

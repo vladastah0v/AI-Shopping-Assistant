@@ -1,10 +1,13 @@
 from collections.abc import AsyncIterator
 from contextlib import AsyncExitStack, asynccontextmanager
 
+import httpx
 from fastapi import FastAPI
 
 from app.ai.embeddings.huggingface import SentenceTransformersProvider
 from app.ai.embeddings.service import EmbeddingService
+from app.ai.llm.ollama import OllamaProvider
+from app.ai.llm.provider import LLMProvider
 from app.core.config import Settings
 from app.core.database import create_database_engine
 from app.core.redis import create_redis_client
@@ -15,7 +18,10 @@ from app.modules.search.service import ProductSearch
 
 
 def create_app(
-    settings: Settings | None = None, *, embeddings: EmbeddingService | None = None
+    settings: Settings | None = None,
+    *,
+    embeddings: EmbeddingService | None = None,
+    llm: LLMProvider | None = None,
 ) -> FastAPI:
     @asynccontextmanager
     async def lifespan(application: FastAPI) -> AsyncIterator[None]:
@@ -35,6 +41,20 @@ def create_app(
             application.state.product_search = ProductSearch(
                 active_embeddings, embedding_timeout=config.embedding_timeout_seconds
             )
+            active_llm = llm
+            if active_llm is None and config.ollama_enabled:
+                ollama_http = await resources.enter_async_context(
+                    httpx.AsyncClient(
+                        base_url=str(config.ollama_url),
+                        trust_env=False,
+                        timeout=httpx.Timeout(
+                            config.ollama_generation_timeout_seconds,
+                            connect=config.ollama_connection_timeout_seconds,
+                        ),
+                    )
+                )
+                active_llm = OllamaProvider(config, ollama_http)
+            application.state.llm = active_llm
             yield
 
     application = FastAPI(

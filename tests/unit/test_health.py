@@ -108,3 +108,10 @@ async def test_readiness_times_out_slow_dependency(
 
     assert response.status_code == 503
     assert response.json() == {"status": "not_ready", "postgres": True, "redis": False}
+
+
+async def test_optional_ai_status_does_not_affect_readiness(client: httpx.AsyncClient) -> None:
+    response = await client.get("/health/ai")
+    assert response.status_code == 200
+    assert response.json() == {"status": "disabled"}
+    assert (await client.get("/health/ready")).status_code == 200
