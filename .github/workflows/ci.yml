@@ -1,0 +1,48 @@
+name: Проверки приложения
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: shopping-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  checks:
+    name: Линтинг, тесты и контейнер
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - name: Получить исходный код
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Настроить uv
+        uses: astral-sh/setup-uv@37802adc94f370d6bfd71619e3f0bf239e1f3b78 # v7.6.0
+        with:
+          version: "0.13.7"
+          enable-cache: true
+          cache-dependency-glob: uv.lock
+
+      - name: Проверить историю на секреты
+        run: |
+          docker run --rm             -e GIT_CONFIG_COUNT=1 -e GIT_CONFIG_KEY_0=safe.directory -e GIT_CONFIG_VALUE_0=/repo             -v "$PWD:/repo:ro" zricethezav/gitleaks:v8.28.0 git --redact --no-banner /repo
+
+      - name: Проверить сборку, миграции и тесты
+        env:
+          CI_COVERAGE_PATH: ${{ runner.temp }}/shopping-coverage.xml
+        run: ./scripts/ci_checks.sh
+
+      - name: Сохранить покрытие
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: shopping-coverage
+          path: ${{ runner.temp }}/shopping-coverage.xml
+          if-no-files-found: error

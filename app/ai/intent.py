@@ -1,11 +1,10 @@
+from __future__ import annotations
+
 import re
 from decimal import Decimal, localcontext
 from enum import StrEnum
-from typing import Annotated, Literal
+from typing import TYPE_CHECKING, Annotated, Literal
 
-from langchain_core.prompt_values import ChatPromptValue
-from langchain_core.runnables import RunnableLambda
-from langsmith import tracing_context
 from pydantic import (
     AfterValidator,
     BaseModel,
@@ -17,9 +16,11 @@ from pydantic import (
 
 from app.ai.guardrails import suspicious_instruction
 from app.ai.llm.provider import ChatMessage, LLMError, LLMProvider
-from app.ai.prompts.intent import INTENT_PROMPT
 from app.core.http import validate_public_text
 from app.modules.catalog.schemas import ProductFilters
+
+if TYPE_CHECKING:
+    from langchain_core.prompt_values import ChatPromptValue
 
 
 class Intent(StrEnum):
@@ -142,7 +143,13 @@ def infer_intent(message: str) -> IntentQuery:
 class IntentResolver:
     def __init__(self, provider: LLMProvider | None) -> None:
         self.provider = provider
-        self.chain = INTENT_PROMPT | RunnableLambda(self._predict) if provider else None
+        self.chain = None
+        if provider is not None:
+            from langchain_core.runnables import RunnableLambda
+
+            from app.ai.prompts.intent import INTENT_PROMPT
+
+            self.chain = INTENT_PROMPT | RunnableLambda(self._predict)
 
     async def resolve(self, message: str) -> IntentQuery:
         if suspicious_instruction(message):
@@ -153,6 +160,8 @@ class IntentResolver:
             return IntentQuery(intent=Intent.CLARIFICATION)
         if self.chain is None:
             return fallback
+        from langsmith import tracing_context
+
         try:
             with tracing_context(enabled=False):
                 result = await self.chain.ainvoke(
