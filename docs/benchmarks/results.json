@@ -1,0 +1,134 @@
+{
+  "profile": "small",
+  "catalog_size": 100,
+  "vector_fixture": "synthetic-random-seed-42-384d",
+  "machine": {
+    "platform": "Darwin",
+    "architecture": "x86_64"
+  },
+  "client_cpu_seconds": 0.6282,
+  "client_max_rss_bytes": 78532608,
+  "elapsed_seconds": 1.7149,
+  "llm_latency": "NOT_MEASURED",
+  "embedding_latency": "NOT_MEASURED",
+  "time_to_first_token": "NOT_MEASURED",
+  "tokens_per_second": "NOT_MEASURED",
+  "experiments": [
+    {
+      "experiment": "pgvector_exact",
+      "top_k": 5,
+      "recall_at_k": 1.0,
+      "index_build_ms": null,
+      "samples": 10,
+      "p50_ms": 3.9376,
+      "p95_ms": 5.674,
+      "p99_ms": 6.0981,
+      "serial_rps": 242.194,
+      "error_rate": 0
+    },
+    {
+      "experiment": "pgvector_hnsw",
+      "top_k": 5,
+      "recall_at_k": 1.0,
+      "index_build_ms": 41.623,
+      "samples": 10,
+      "p50_ms": 3.797,
+      "p95_ms": 5.8768,
+      "p99_ms": 6.4773,
+      "serial_rps": 241.364,
+      "error_rate": 0
+    },
+    {
+      "experiment": "pgvector_ivfflat",
+      "top_k": 5,
+      "recall_at_k": 0.58,
+      "index_build_ms": 15.547,
+      "samples": 10,
+      "p50_ms": 3.6162,
+      "p95_ms": 4.1173,
+      "p99_ms": 4.3181,
+      "serial_rps": 274.535,
+      "error_rate": 0
+    },
+    {
+      "experiment": "keyword_cache_off",
+      "top_k": 5,
+      "first_request_ms": 64.0243,
+      "samples": 10,
+      "p50_ms": 15.9605,
+      "p95_ms": 18.1987,
+      "p99_ms": 19.0665,
+      "serial_rps": 66.33,
+      "error_rate": 0
+    },
+    {
+      "experiment": "keyword_cache_on",
+      "top_k": 5,
+      "first_request_ms": 36.3368,
+      "samples": 10,
+      "p50_ms": 5.5738,
+      "p95_ms": 21.1731,
+      "p99_ms": 30.7397,
+      "serial_rps": 119.411,
+      "error_rate": 0
+    },
+    {
+      "experiment": "pgvector_exact",
+      "top_k": 10,
+      "recall_at_k": 1.0,
+      "index_build_ms": null,
+      "samples": 10,
+      "p50_ms": 5.5944,
+      "p95_ms": 11.2515,
+      "p99_ms": 11.7804,
+      "serial_rps": 155.599,
+      "error_rate": 0
+    },
+    {
+      "experiment": "pgvector_hnsw",
+      "top_k": 10,
+      "recall_at_k": 1.0,
+      "index_build_ms": 40.6796,
+      "samples": 10,
+      "p50_ms": 4.6453,
+      "p95_ms": 6.3368,
+      "p99_ms": 6.6806,
+      "serial_rps": 213.072,
+      "error_rate": 0
+    },
+    {
+      "experiment": "pgvector_ivfflat",
+      "top_k": 10,
+      "recall_at_k": 0.41,
+      "index_build_ms": 11.6944,
+      "samples": 10,
+      "p50_ms": 3.5759,
+      "p95_ms": 5.7433,
+      "p99_ms": 6.0172,
+      "serial_rps": 247.698,
+      "error_rate": 0
+    },
+    {
+      "experiment": "keyword_cache_off",
+      "top_k": 10,
+      "first_request_ms": 17.424,
+      "samples": 10,
+      "p50_ms": 16.8846,
+      "p95_ms": 26.0102,
+      "p99_ms": 28.8212,
+      "serial_rps": 55.625,
+      "error_rate": 0
+    },
+    {
+      "experiment": "keyword_cache_on",
+      "top_k": 10,
+      "first_request_ms": 37.9264,
+      "samples": 10,
+      "p50_ms": 7.1186,
+      "p95_ms": 8.991,
+      "p99_ms": 9.3132,
+      "serial_rps": 134.557,
+      "error_rate": 0
+    }
+  ]
+}

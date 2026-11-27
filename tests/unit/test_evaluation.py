@@ -16,3 +16,11 @@ def test_ranking_metrics_reward_early_unique_matches() -> None:
     assert result["mrr"] == 1
     assert 0 < result["ndcg_at_k"] < 1
     assert rate(0, 0) == "NOT_MEASURED"
+
+
+def test_benchmark_percentiles_interpolate_between_samples() -> None:
+    from scripts.benchmark import percentile, summarize
+
+    assert percentile([40, 10, 20], 0.5) == 20
+    assert percentile([1, 3], 0.75) == 2.5
+    assert summarize([20, 20])["serial_rps"] == 50
