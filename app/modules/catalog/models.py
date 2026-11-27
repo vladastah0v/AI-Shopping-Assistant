@@ -8,6 +8,7 @@ from uuid import UUID
 
 from sqlalchemy import (
     CheckConstraint,
+    Computed,
     DateTime,
     Enum,
     FetchedValue,
@@ -17,9 +18,10 @@ from sqlalchemy import (
     String,
     Text,
     func,
+    literal_column,
     text,
 )
-from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy.dialects.postgresql import JSONB, TSVECTOR
 from sqlalchemy.ext.mutable import MutableDict
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -43,6 +45,34 @@ NUMERIC_SPECIFICATION_KEYS = (
 )
 
 _numeric_specification_pattern = "|".join(NUMERIC_SPECIFICATION_KEYS)
+
+SEARCH_CONFIGURATION = "'pg_catalog.russian'::regconfig"
+SEARCH_TRANSLATION_FROM = "Ёё‐‑‒–—−"
+SEARCH_TRANSLATION_TO = "Ее------"
+SKU_SEPARATOR_PATTERN = "[^[:alnum:]]+"
+
+
+def _weighted_search_terms(expression: str, weight: str) -> str:
+    return (
+        f"setweight(to_tsvector({SEARCH_CONFIGURATION}, "
+        f"translate({expression}, '{SEARCH_TRANSLATION_FROM}', '{SEARCH_TRANSLATION_TO}')), '{weight}')"
+    )
+
+
+PRODUCT_SEARCH_VECTOR = " || ".join(
+    (
+        _weighted_search_terms("name || ' ' || sku", "A"),
+        _weighted_search_terms("left(specifications::text, 8192)", "B"),
+        _weighted_search_terms("left(description, 16000)", "C"),
+    )
+)
+DOCUMENT_SEARCH_VECTOR = " || ".join(
+    (
+        _weighted_search_terms("title", "A"),
+        _weighted_search_terms("left(content, 65536)", "C"),
+    )
+)
+PRODUCT_SEARCH_SKU = f"regexp_replace(lower(sku), '{SKU_SEPARATOR_PATTERN}', '', 'g')"
 
 
 class DocumentType(StrEnum):
@@ -101,6 +131,8 @@ class Product(Base):
             name="specifications_numeric_values",
         ),
         Index("ix_products_category_id_price", "category_id", "price"),
+        Index("ix_products_search_vector", "search_vector", postgresql_using="gin"),
+        Index("ix_products_search_sku", "search_sku"),
     )
 
     id: Mapped[UUID] = mapped_column(primary_key=True, server_default=func.gen_random_uuid())
@@ -121,6 +153,12 @@ class Product(Base):
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), server_onupdate=FetchedValue()
     )
+    search_vector: Mapped[str] = mapped_column(
+        TSVECTOR, Computed(literal_column(PRODUCT_SEARCH_VECTOR), persisted=True), deferred=True
+    )
+    search_sku: Mapped[str] = mapped_column(
+        Text, Computed(literal_column(PRODUCT_SEARCH_SKU), persisted=True), deferred=True
+    )
 
     category: Mapped[Category] = relationship(lazy="raise")
     brand: Mapped[Brand] = relationship(lazy="raise")
@@ -138,6 +176,7 @@ class ProductDocument(Base):
         CheckConstraint("btrim(title) <> ''", name="title_not_blank"),
         CheckConstraint("btrim(content) <> ''", name="content_not_blank"),
         CheckConstraint("btrim(source) <> ''", name="source_not_blank"),
+        Index("ix_product_documents_search_vector", "search_vector", postgresql_using="gin"),
     )
 
     id: Mapped[UUID] = mapped_column(primary_key=True, server_default=func.gen_random_uuid())
@@ -161,6 +200,9 @@ class ProductDocument(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), server_onupdate=FetchedValue()
+    )
+    search_vector: Mapped[str] = mapped_column(
+        TSVECTOR, Computed(literal_column(DOCUMENT_SEARCH_VECTOR), persisted=True), deferred=True
     )
 
     product: Mapped[Product] = relationship(back_populates="documents", lazy="raise")
