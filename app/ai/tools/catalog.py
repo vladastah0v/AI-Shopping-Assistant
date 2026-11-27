@@ -175,9 +175,9 @@ class CatalogTools:
             return ToolResult()
         constraints = arguments.filters.model_dump(exclude_none=True)
         if arguments.cheaper:
-            maximum = min(
-                source.price - Decimal("0.01"), arguments.filters.max_price or source.price
-            )
+            maximum = source.price - Decimal("0.01")
+            if arguments.filters.max_price is not None:
+                maximum = min(maximum, arguments.filters.max_price)
             if maximum < 0 or maximum < (arguments.filters.min_price or 0):
                 return ToolResult()
             if arguments.filters.currency not in (None, source.currency):

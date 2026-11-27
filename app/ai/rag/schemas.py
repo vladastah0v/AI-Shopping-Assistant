@@ -1,7 +1,7 @@
 from typing import Literal
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, JsonValue
 
 from app.ai.intent import Intent
 from app.modules.catalog.models import DocumentType
@@ -37,10 +37,18 @@ class AnswerMetadata(BaseModel):
     mode: Literal["model", "catalog"] = "catalog"
 
 
+class Recommendation(BaseModel):
+    product_id: UUID
+    kind: Literal["optimal", "budget", "specifications", "alternative"]
+    reason: str
+
+
 class RagAnswer(BaseModel):
     answer: str
     intent: Intent
     recommended_products: list[ProductRead] = Field(default_factory=list)
+    recommendations: list[Recommendation] = Field(default_factory=list)
+    compared_specifications: dict[str, list[JsonValue]] = Field(default_factory=dict)
     sources: list[SourceReference] = Field(default_factory=list)
     clarification_required: bool = False
     metadata: AnswerMetadata = Field(default_factory=AnswerMetadata)

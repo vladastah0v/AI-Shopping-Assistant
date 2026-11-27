@@ -1,7 +1,7 @@
 import re
 from decimal import Decimal, localcontext
 from enum import StrEnum
-from typing import Annotated
+from typing import Annotated, Literal
 
 from langchain_core.prompt_values import ChatPromptValue
 from langchain_core.runnables import RunnableLambda
@@ -31,6 +31,7 @@ class IntentQuery(BaseModel):
     query: Annotated[str, StringConstraints(strip_whitespace=True, max_length=512)] = ""
     filters: ProductFilters = Field(default_factory=ProductFilters)
     use_case: str | None = Field(default=None, max_length=100)
+    alternative: Literal["cheaper", "similar"] | None = None
 
 
 _NUMBER = r"(?:\d{1,3}(?:[ _]\d{3})+|\d+)(?:[.,]\d+)?"
@@ -114,7 +115,14 @@ def infer_intent(message: str) -> IntentQuery:
     except (ValidationError, ArithmeticError):
         return IntentQuery(intent=Intent.CLARIFICATION)
     query = purpose or (message.strip()[:512] if category is None else "")
-    return IntentQuery(intent=intent, query=query, filters=constraints, use_case=purpose)
+    alternative = None
+    if re.search(r"дешевле|подешевле|менее дорог", normalized):
+        alternative = "cheaper"
+    elif re.search(r"альтернатив|похож|такой же|такая же", normalized):
+        alternative = "similar"
+    return IntentQuery(
+        intent=intent, query=query, filters=constraints, use_case=purpose, alternative=alternative
+    )
 
 
 class IntentResolver:
@@ -146,6 +154,7 @@ class IntentResolver:
                 query=result.query or fallback.query,
                 filters=ProductFilters.model_validate(filters),
                 use_case=result.use_case or fallback.use_case,
+                alternative=fallback.alternative or result.alternative,
             )
         except (LLMError, ValidationError):
             return fallback

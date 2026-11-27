@@ -8,9 +8,16 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.ai.intent import Intent, IntentQuery
 from app.ai.llm.provider import ChatMessage, LLMError, LLMProvider
 from app.ai.prompts.rag import RAG_PROMPT
+from app.ai.rag.recommendations import recommend
 from app.ai.rag.retrieval import RagContext, RagRetriever
 from app.ai.rag.schemas import AnswerMetadata, AnswerPlan, RagAnswer
-from app.ai.tools.catalog import CatalogTools, ToolError, route_lookup
+from app.ai.tools.catalog import (
+    AlternativeArguments,
+    CatalogTools,
+    ToolCall,
+    ToolError,
+    route_lookup,
+)
 from app.modules.catalog.schemas import ProductRead
 
 _CONTEXT_LIMIT = 8_000
@@ -88,6 +95,25 @@ class RagService:
             )
         started = perf_counter()
         lookup = route_lookup(request, product_ids or [])
+        if request.alternative is not None:
+            if not product_ids:
+                return RagAnswer(
+                    answer="Укажите товар, для которого нужно подобрать альтернативу.",
+                    intent=request.intent,
+                    clarification_required=True,
+                )
+            arguments = AlternativeArguments(
+                product_id=product_ids[0],
+                cheaper=request.alternative == "cheaper",
+                filters=request.filters,
+            )
+            lookup = ToolCall(name="find_alternatives", arguments=arguments.model_dump(mode="json"))
+        if request.intent == Intent.PRODUCT_COMPARISON and lookup is None:
+            return RagAnswer(
+                answer="Укажите от двух до пяти товаров для сравнения.",
+                intent=request.intent,
+                clarification_required=True,
+            )
         if lookup is None:
             context = await self.retriever.retrieve(session, request)
         else:
@@ -116,7 +142,8 @@ class RagService:
                 clarification_required=True,
                 metadata=metadata,
             )
-        selected = context.products[:3]
+        comparison = request.intent == Intent.PRODUCT_COMPARISON
+        selected = context.products if comparison else context.products[:3]
         document_ids = [
             evidence.reference.document_id
             for evidence in context.evidence
@@ -128,7 +155,7 @@ class RagService:
             Intent.PRODUCT_COMPARISON: "comparison",
         }.get(request.intent, "fit")
         prompt, product_ids, sent_documents = _model_context(request, context)
-        if self.provider is not None and product_ids:
+        if self.provider is not None and product_ids and not comparison:
             started = perf_counter()
             try:
                 text = await self.provider.generate(
@@ -149,12 +176,34 @@ class RagService:
             except (LLMError, ValidationError, ValueError):
                 pass
             metadata.generation_duration_ms = (perf_counter() - started) * 1000
+        recommendations = []
+        if request.intent in (Intent.PRODUCT_SEARCH, Intent.RECOMMENDATION):
+            ordered = list({item.id: item for item in selected + context.products}.values())
+            recommendations = recommend(request, ordered)
+            by_id = {product.id: product for product in ordered}
+            recommended = [by_id[item.product_id] for item in recommendations]
+            selected = list({item.id: item for item in recommended + selected}.values())[:5]
+        selected_ids = {item.id for item in selected}
         sources = {item.reference.document_id: item.reference for item in context.evidence}
+        compared = (
+            {
+                key: [item.specifications.get(key) for item in selected]
+                for key in sorted({key for item in selected for key in item.specifications})[:20]
+            }
+            if comparison
+            else {}
+        )
         return RagAnswer(
             intent=request.intent,
             answer=self.render(emphasis, selected),
             recommended_products=selected,
-            sources=[sources[document_id] for document_id in document_ids],
+            recommendations=recommendations,
+            compared_specifications=compared,
+            sources=[
+                sources[document_id]
+                for document_id in document_ids
+                if sources[document_id].product_id in selected_ids
+            ],
             metadata=metadata,
         )
 
