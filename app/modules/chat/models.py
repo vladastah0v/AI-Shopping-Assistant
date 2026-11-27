@@ -55,3 +55,64 @@ class ChatMessageRecord(Base):
     model_name: Mapped[str | None] = mapped_column(String(160))
     details: Mapped[dict] = mapped_column("metadata", JSONB, server_default=text("'{}'::jsonb"))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class RecommendationHistory(Base):
+    __tablename__ = "recommendation_history"
+    __table_args__ = (
+        UniqueConstraint(
+            "message_id", "product_id", name="uq_recommendation_history_message_product"
+        ),
+    )
+
+    id: Mapped[UUID] = mapped_column(primary_key=True, server_default=func.gen_random_uuid())
+    session_id: Mapped[UUID] = mapped_column(
+        ForeignKey("chat_sessions.id", ondelete="CASCADE"), index=True
+    )
+    message_id: Mapped[UUID] = mapped_column(ForeignKey("chat_messages.id", ondelete="CASCADE"))
+    product_id: Mapped[UUID] = mapped_column(
+        ForeignKey("products.id", ondelete="CASCADE"), index=True
+    )
+    recommendation_reason: Mapped[str] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class Feedback(Base):
+    __tablename__ = "feedback"
+    __table_args__ = (
+        CheckConstraint("rating BETWEEN 1 AND 5", name="rating_range"),
+        UniqueConstraint("message_id", name="uq_feedback_message_id"),
+    )
+
+    id: Mapped[UUID] = mapped_column(primary_key=True, server_default=func.gen_random_uuid())
+    session_id: Mapped[UUID] = mapped_column(
+        ForeignKey("chat_sessions.id", ondelete="CASCADE"), index=True
+    )
+    message_id: Mapped[UUID] = mapped_column(ForeignKey("chat_messages.id", ondelete="CASCADE"))
+    rating: Mapped[int]
+    comment: Mapped[str | None] = mapped_column(String(2000))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class LLMRequestRecord(Base):
+    __tablename__ = "llm_requests"
+    __table_args__ = (
+        CheckConstraint("status IN ('model', 'catalog')", name="status_allowed"),
+        CheckConstraint(
+            "retrieval_duration_ms >= 0 AND generation_duration_ms >= 0 AND total_duration_ms >= 0",
+            name="non_negative_durations",
+        ),
+    )
+
+    id: Mapped[UUID] = mapped_column(primary_key=True, server_default=func.gen_random_uuid())
+    session_id: Mapped[UUID] = mapped_column(
+        ForeignKey("chat_sessions.id", ondelete="CASCADE"), index=True
+    )
+    model_name: Mapped[str | None] = mapped_column(String(160))
+    input_tokens: Mapped[int | None]
+    output_tokens: Mapped[int | None]
+    retrieval_duration_ms: Mapped[float]
+    generation_duration_ms: Mapped[float]
+    total_duration_ms: Mapped[float]
+    status: Mapped[str] = mapped_column(String(10))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())

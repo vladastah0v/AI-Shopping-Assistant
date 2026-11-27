@@ -6,13 +6,19 @@ from fastapi import FastAPI
 
 from app.ai.embeddings.huggingface import SentenceTransformersProvider
 from app.ai.embeddings.service import EmbeddingService
+from app.ai.intent import IntentResolver
 from app.ai.llm.ollama import OllamaProvider
 from app.ai.llm.provider import LLMProvider
+from app.ai.rag.retrieval import RagRetriever
+from app.ai.rag.service import RagService
 from app.core.config import Settings
 from app.core.database import create_database_engine
 from app.core.redis import create_redis_client
 from app.health import router as health_router
 from app.modules.catalog.router import router as catalog_router
+from app.modules.chat.router import router as chat_router
+from app.modules.chat.service import ChatService
+from app.modules.chat.store import SessionStore
 from app.modules.search.router import router as search_router
 from app.modules.search.service import ProductSearch
 
@@ -55,6 +61,20 @@ def create_app(
                 )
                 active_llm = OllamaProvider(config, ollama_http)
             application.state.llm = active_llm
+            application.state.chat = ChatService(
+                SessionStore(
+                    redis_client,
+                    ttl_seconds=config.chat_session_ttl_seconds,
+                    history_limit=config.chat_history_limit,
+                ),
+                IntentResolver(active_llm),
+                RagService(RagRetriever(application.state.product_search), active_llm),
+            )
+            application.state.chat_timeout = (
+                config.dependency_timeout_seconds
+                + 2 * config.ollama_generation_timeout_seconds
+                + 2 * config.embedding_timeout_seconds
+            )
             yield
 
     application = FastAPI(
@@ -66,6 +86,7 @@ def create_app(
     application.include_router(health_router)
     application.include_router(catalog_router)
     application.include_router(search_router)
+    application.include_router(chat_router)
     return application
 
 
