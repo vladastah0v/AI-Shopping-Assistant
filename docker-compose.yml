@@ -47,6 +47,26 @@ services:
       postgres:
         condition: service_healthy
 
+  embeddings:
+    <<: *app-service
+    profiles: [embeddings]
+    image: ai-shopping-assistant-embeddings:local
+    build:
+      context: .
+      target: embeddings
+    command: ["python", "-m", "scripts.generate_embeddings"]
+    environment:
+      <<: *app-environment
+      SHOPPING_POSTGRES_USER: shopping_migrator
+      SHOPPING_POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    volumes:
+      - embedding_models:/var/cache/huggingface
+    tmpfs:
+      - /tmp
+
   postgres:
     image: pgvector/pgvector:0.8.7-pg16-bookworm
     environment:
@@ -77,3 +97,4 @@ services:
 volumes:
   postgres_data:
   redis_data:
+  embedding_models:

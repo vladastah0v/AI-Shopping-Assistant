@@ -6,6 +6,7 @@ from sqlalchemy import Connection
 from sqlalchemy.ext.asyncio import create_async_engine
 from sqlalchemy.pool import NullPool
 
+from app.ai.embeddings import models as embedding_models  # noqa: F401 -- Register embedding tables.
 from app.core.config import Settings
 from app.modules.catalog import models as catalog_models
 
