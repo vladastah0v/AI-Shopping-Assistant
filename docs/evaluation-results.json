@@ -1,5 +1,5 @@
 {
-  "dataset_version": "small-42-v1",
+  "dataset_version": "small-42-v2",
   "cases": 144,
   "provider": "catalog",
   "embedding_provider": "NOT_RUN",

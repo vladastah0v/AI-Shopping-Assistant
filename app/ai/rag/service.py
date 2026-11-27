@@ -106,6 +106,7 @@ class RagService:
             arguments = AlternativeArguments(
                 product_id=product_ids[0],
                 cheaper=request.alternative == "cheaper",
+                more_ram=request.more_ram,
                 filters=request.filters,
             )
             lookup = ToolCall(name="find_alternatives", arguments=arguments.model_dump(mode="json"))

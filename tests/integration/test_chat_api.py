@@ -15,6 +15,9 @@ pytestmark = pytest.mark.asyncio
 
 
 async def test_chat_turns_feedback_and_stream(session: AsyncSession) -> None:
+    redis_url = os.environ.get("SHOPPING_TEST_REDIS_URL")
+    if not redis_url:
+        pytest.skip("SHOPPING_TEST_REDIS_URL is required for Chat API integration tests")
     url = make_url(
         os.environ.get("SHOPPING_TEST_APP_DATABASE_URL") or os.environ["SHOPPING_TEST_DATABASE_URL"]
     )
@@ -25,7 +28,7 @@ async def test_chat_turns_feedback_and_stream(session: AsyncSession) -> None:
         postgres_db=url.database,
         postgres_user=url.username,
         postgres_password=url.password,
-        redis_url=os.environ.get("SHOPPING_TEST_REDIS_URL", "redis://127.0.0.1:6379/0"),
+        redis_url=redis_url,
         dependency_timeout_seconds=5,
     )
     category = await session.scalar(select(Category).where(Category.slug == "laptops"))

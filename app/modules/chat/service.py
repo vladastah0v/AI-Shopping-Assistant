@@ -74,10 +74,17 @@ class ChatService:
                 in {Intent.CLARIFICATION, Intent.PRODUCT_SEARCH, Intent.RECOMMENDATION}
             ):
                 request = request.model_copy(update={"intent": Intent.PRODUCT_INFORMATION})
-            answer = await self.rag.answer(db, request, product_ids=ids)
+            effective = request
+            if ids and request.intent == Intent.STOCK_CHECK:
+                effective = request.model_copy(
+                    update={"filters": request.filters.model_copy(update={"in_stock": None})}
+                )
+            answer = await self.rag.answer(db, effective, product_ids=ids)
             if request.intent in _CATALOG_INTENTS:
                 state = SessionMemory(
-                    filters=request.filters,
+                    filters=effective.filters
+                    if request.intent == Intent.STOCK_CHECK
+                    else request.filters,
                     query=request.query,
                     use_case=request.use_case,
                     preference=request.alternative or state.preference,

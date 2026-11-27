@@ -47,3 +47,10 @@ async def test_chain_validates_structure_and_preserves_explicit_budget(output) -
     assert messages[0].role == "system"
     assert messages[1].content == "Найди ноутбук до 80 тыс."
     assert "filters" in schema["properties"]
+
+
+def test_relative_ram_request_keeps_alternative_intent() -> None:
+    request = infer_intent("Есть такой же ноутбук, но с большей оперативной памятью?")
+    assert request.intent == Intent.RECOMMENDATION
+    assert request.alternative == "similar"
+    assert request.more_ram

@@ -66,6 +66,7 @@ class AlternativeArguments(BaseModel):
     product_id: UUID
     filters: ProductFilters = Field(default_factory=ProductFilters)
     cheaper: bool = False
+    more_ram: bool = False
     limit: int = Field(default=5, ge=1, le=20)
 
 
@@ -188,6 +189,14 @@ class CatalogTools:
             if arguments.filters.currency not in (None, source.currency):
                 return ToolResult()
             constraints.update(max_price=maximum, currency=source.currency)
+        if arguments.more_ram:
+            memory = source.specifications.get("ram_gb")
+            if type(memory) not in (int, float):
+                return ToolResult()
+            previous = arguments.filters.spec
+            if len(previous) >= 12:
+                raise ToolError("Уточните требования к оперативной памяти.")
+            constraints["spec"] = [*previous, f"ram_gb:gte:{int(memory) + 1}"]
         constraints.setdefault("category_id", source.category_id)
         constraints.setdefault("in_stock", True)
         query = ProductQuery(**constraints, limit=arguments.limit + 1, sort="price_asc")

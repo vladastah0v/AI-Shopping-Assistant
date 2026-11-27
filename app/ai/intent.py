@@ -47,6 +47,7 @@ class IntentQuery(BaseModel):
     filters: ProductFilters = Field(default_factory=ProductFilters)
     use_case: str | None = Field(default=None, max_length=100)
     alternative: Literal["cheaper", "similar"] | None = None
+    more_ram: bool = False
 
 
 _NUMBER = r"(?:\d{1,3}(?:[ _]\d{3})+|\d+)(?:[.,]\d+)?"
@@ -133,10 +134,21 @@ def infer_intent(message: str) -> IntentQuery:
     alternative = None
     if re.search(r"дешевле|подешевле|менее дорог", normalized):
         alternative = "cheaper"
-    elif re.search(r"альтернатив|похож|такой же|такая же", normalized):
+    more_ram = (
+        re.search(r"больш[а-я]*|побольш[а-я]*", normalized) is not None
+        and re.search(r"оперативн|oзу|озу|ram", normalized) is not None
+    )
+    if alternative is None and (
+        more_ram or re.search(r"альтернатив|похож|такой же|такая же", normalized)
+    ):
         alternative = "similar"
     return IntentQuery(
-        intent=intent, query=query, filters=constraints, use_case=purpose, alternative=alternative
+        intent=Intent.RECOMMENDATION if more_ram else intent,
+        query=query,
+        filters=constraints,
+        use_case=purpose,
+        alternative=alternative,
+        more_ram=more_ram,
     )
 
 
@@ -181,6 +193,7 @@ class IntentResolver:
                 filters=ProductFilters.model_validate(filters),
                 use_case=result.use_case or fallback.use_case,
                 alternative=fallback.alternative or result.alternative,
+                more_ram=fallback.more_ram or result.more_ram,
             )
         except (LLMError, ValidationError):
             return fallback

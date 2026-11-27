@@ -46,6 +46,17 @@ async def test_tools_are_bounded_and_apply_filters(session: AsyncSession) -> Non
     comparison, alternatives = await tools.execute(session, [compare, alternative])
     assert comparison.specifications == {"ram_gb": [32, 32]}
     assert [item.id for item in alternatives.products] == [products[1].id]
+    upgrade = ToolCall(
+        name="find_alternatives",
+        arguments={
+            "product_id": str(products[2].id),
+            "more_ram": True,
+            "filters": {"max_price": 75_000},
+        },
+    )
+    assert [item.id for item in (await tools.execute(session, [upgrade]))[0].products] == [
+        products[1].id
+    ]
     with pytest.raises(ToolError):
         await tools.execute(session, [compare] * 4)
     with pytest.raises(ValidationError):

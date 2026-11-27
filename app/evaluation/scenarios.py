@@ -4,7 +4,7 @@ from app.ai.intent import Intent
 from app.modules.catalog.schemas import ProductFilters
 from app.modules.catalog.synthetic import DEFAULT_SEED, PROFILE_SIZES, generate_products
 
-DATASET_VERSION = "small-42-v1"
+DATASET_VERSION = "small-42-v2"
 
 
 @dataclass(frozen=True, slots=True)
@@ -45,6 +45,7 @@ def scenarios() -> list[Scenario]:
             if root in item.values["description"].lower() and item.values["price"] <= ceiling
         )
         other = products[index + 12].values["sku"]
+        stock_sku = products[index + 24].values["sku"]
         sample_number = index + 1
         records = [
             (
@@ -99,12 +100,12 @@ def scenarios() -> list[Scenario]:
             ),
             (
                 "stock",
-                f"{sku} есть в наличии?",
+                f"{stock_sku} есть в наличии?",
                 Intent.STOCK_CHECK,
-                "found" if values["stock_quantity"] > 0 else "clarify",
+                "found",
                 "",
-                (),
-                ProductFilters(in_stock=True),
+                (stock_sku,),
+                ProductFilters(),
                 None,
             ),
             (
