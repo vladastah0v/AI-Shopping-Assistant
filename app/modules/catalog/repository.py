@@ -58,9 +58,13 @@ def product_conditions(filters: ProductFilters) -> list[ColumnElement[bool]]:
 
 
 async def get_products_by_id(
-    session: AsyncSession, product_ids: Sequence[UUID]
+    session: AsyncSession, product_ids: Sequence[UUID], *, filters: ProductFilters | None = None
 ) -> dict[UUID, Product]:
-    statement = _product_cards().where(Product.is_active.is_(True), Product.id.in_(product_ids))
+    if not product_ids:
+        return {}
+    statement = _product_cards().where(
+        *product_conditions(filters or ProductFilters()), Product.id.in_(product_ids)
+    )
     return {product.id: product for product in await session.scalars(statement)}
 
 

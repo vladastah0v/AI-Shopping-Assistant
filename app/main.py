@@ -3,14 +3,20 @@ from contextlib import AsyncExitStack, asynccontextmanager
 
 from fastapi import FastAPI
 
+from app.ai.embeddings.huggingface import SentenceTransformersProvider
+from app.ai.embeddings.service import EmbeddingService
 from app.core.config import Settings
 from app.core.database import create_database_engine
 from app.core.redis import create_redis_client
 from app.health import router as health_router
 from app.modules.catalog.router import router as catalog_router
+from app.modules.search.router import router as search_router
+from app.modules.search.service import ProductSearch
 
 
-def create_app(settings: Settings | None = None) -> FastAPI:
+def create_app(
+    settings: Settings | None = None, *, embeddings: EmbeddingService | None = None
+) -> FastAPI:
     @asynccontextmanager
     async def lifespan(application: FastAPI) -> AsyncIterator[None]:
         config = settings if settings is not None else Settings()
@@ -23,6 +29,12 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             application.state.database_engine = engine
             application.state.redis_client = redis_client
             application.state.dependency_timeout_seconds = config.dependency_timeout_seconds
+            active_embeddings = embeddings
+            if active_embeddings is None and config.semantic_search_enabled:
+                active_embeddings = EmbeddingService(SentenceTransformersProvider())
+            application.state.product_search = ProductSearch(
+                active_embeddings, embedding_timeout=config.embedding_timeout_seconds
+            )
             yield
 
     application = FastAPI(
@@ -33,6 +45,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     )
     application.include_router(health_router)
     application.include_router(catalog_router)
+    application.include_router(search_router)
     return application
 
 

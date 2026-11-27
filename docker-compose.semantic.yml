@@ -1,0 +1,15 @@
+services:
+  api:
+    image: ai-shopping-assistant-semantic:local
+    build:
+      context: .
+      target: embeddings
+    environment:
+      SHOPPING_SEMANTIC_SEARCH_ENABLED: "true"
+      SHOPPING_EMBEDDING_TIMEOUT_SECONDS: ${SHOPPING_EMBEDDING_TIMEOUT_SECONDS:-8}
+    volumes:
+      - embedding_models:/var/cache/huggingface:ro
+    tmpfs:
+      - /tmp
+  migrate:
+    image: ai-shopping-assistant-semantic:local

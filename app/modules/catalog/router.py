@@ -1,5 +1,6 @@
 import asyncio
 from collections.abc import AsyncIterator, Sequence
+from contextlib import asynccontextmanager
 from typing import Annotated
 from uuid import UUID
 
@@ -33,12 +34,13 @@ router = APIRouter(
 _NOT_FOUND = {404: {"model": CatalogError, "description": "Товар не найден в публичном каталоге."}}
 
 
-async def _catalog_session(request: Request) -> AsyncIterator[AsyncSession]:
+@asynccontextmanager
+async def catalog_session(request: Request, *, timeout: float) -> AsyncIterator[AsyncSession]:
     state = request.app.state
     try:
         async with (
             AsyncSession(state.database_engine) as session,
-            asyncio.timeout(state.dependency_timeout_seconds),
+            asyncio.timeout(timeout),
         ):
             yield session
     except (DBAPIError, PostgresConnectionError, PoolTimeoutError, OSError) as error:
@@ -49,6 +51,13 @@ async def _catalog_session(request: Request) -> AsyncIterator[AsyncSession]:
         raise HTTPException(
             status.HTTP_503_SERVICE_UNAVAILABLE, "Каталог временно недоступен."
         ) from error
+
+
+async def _catalog_session(request: Request) -> AsyncIterator[AsyncSession]:
+    async with catalog_session(
+        request, timeout=request.app.state.dependency_timeout_seconds
+    ) as session:
+        yield session
 
 
 type CatalogSession = Annotated[AsyncSession, Depends(_catalog_session, scope="function")]

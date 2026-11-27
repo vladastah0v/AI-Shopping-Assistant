@@ -20,6 +20,9 @@ class Settings(BaseSettings):
     redis_url: RedisDsn = Field(default=RedisDsn("redis://127.0.0.1:6379/0"), repr=False)
     dependency_timeout_seconds: float = Field(default=2.0, gt=0, allow_inf_nan=False)
 
+    semantic_search_enabled: bool = False
+    embedding_timeout_seconds: float = Field(default=8, gt=0, le=60)
+
     @property
     def database_url(self) -> URL:
         return URL.create(
