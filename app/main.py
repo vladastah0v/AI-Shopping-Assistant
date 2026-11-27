@@ -2,7 +2,9 @@ from collections.abc import AsyncIterator
 from contextlib import AsyncExitStack, asynccontextmanager
 
 import httpx
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
+from fastapi.exceptions import RequestValidationError
+from fastapi.responses import JSONResponse
 
 from app.ai.embeddings.huggingface import SentenceTransformersProvider
 from app.ai.embeddings.service import EmbeddingService
@@ -13,6 +15,7 @@ from app.ai.rag.retrieval import RagRetriever
 from app.ai.rag.service import RagService
 from app.core.config import Settings
 from app.core.database import create_database_engine
+from app.core.http import RequestLimitMiddleware
 from app.core.redis import create_redis_client
 from app.health import router as health_router
 from app.modules.catalog.router import router as catalog_router
@@ -83,6 +86,19 @@ def create_app(
         version="0.1.0",
         lifespan=lifespan,
     )
+    application.add_middleware(RequestLimitMiddleware)
+
+    @application.exception_handler(RequestValidationError)
+    async def invalid_input(_: Request, error: RequestValidationError) -> JSONResponse:
+        return JSONResponse(
+            status_code=422,
+            content={
+                "detail": [
+                    {key: item[key] for key in ("loc", "type", "msg")} for item in error.errors()
+                ]
+            },
+        )
+
     application.include_router(health_router)
     application.include_router(catalog_router)
     application.include_router(search_router)

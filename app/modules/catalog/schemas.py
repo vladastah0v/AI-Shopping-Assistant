@@ -14,6 +14,7 @@ from pydantic import (
     model_validator,
 )
 
+from app.core.http import validate_public_text
 from app.modules.catalog.models import NUMERIC_SPECIFICATION_KEYS
 
 _NUMERIC_KEYS = frozenset(
@@ -50,7 +51,7 @@ class SpecificationFilter:
 
 
 def _parse_specification_filter(raw: str) -> SpecificationFilter:
-    parts = raw.split(":", 2)
+    parts = validate_public_text(raw).split(":", 2)
     if len(parts) != 3:
         raise ValueError("Укажите характеристику в формате ключ:оператор:значение.")
     key, operator, value = parts

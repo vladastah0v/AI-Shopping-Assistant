@@ -3,6 +3,7 @@ from dataclasses import dataclass, field
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.ai.guardrails import suspicious_instruction
 from app.ai.intent import IntentQuery
 from app.ai.rag.schemas import Evidence, SourceReference
 from app.ai.retrieval.fusion import reciprocal_rank_fusion
@@ -127,6 +128,8 @@ class RagRetriever:
         for row in sorted(rows, key=lambda item: priority.get(item["document_id"], len(priority))):
             chunk = chunks.get(row["document_id"])
             text = " ".join((chunk.content if chunk else row["excerpt"]).split())[:600]
+            if suspicious_instruction(text) or suspicious_instruction(row["title"]):
+                continue
             key = (row["product_id"], text)
             if key in seen:
                 continue

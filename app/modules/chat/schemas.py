@@ -2,13 +2,20 @@ from datetime import datetime
 from typing import Annotated, Literal
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field, JsonValue, StringConstraints
+from pydantic import AfterValidator, BaseModel, ConfigDict, Field, JsonValue, StringConstraints
 
 from app.ai.rag.schemas import RagAnswer
+from app.core.http import validate_public_text
 
-type Title = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=160)]
+type Title = Annotated[
+    str,
+    StringConstraints(strip_whitespace=True, min_length=1, max_length=160),
+    AfterValidator(validate_public_text),
+]
 type MessageText = Annotated[
-    str, StringConstraints(strip_whitespace=True, min_length=1, max_length=2000)
+    str,
+    StringConstraints(strip_whitespace=True, min_length=1, max_length=2000),
+    AfterValidator(validate_public_text),
 ]
 
 

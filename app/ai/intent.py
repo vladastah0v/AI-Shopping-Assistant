@@ -5,10 +5,20 @@ from typing import Annotated, Literal
 
 from langchain_core.prompt_values import ChatPromptValue
 from langchain_core.runnables import RunnableLambda
-from pydantic import BaseModel, ConfigDict, Field, StringConstraints, ValidationError
+from langsmith import tracing_context
+from pydantic import (
+    AfterValidator,
+    BaseModel,
+    ConfigDict,
+    Field,
+    StringConstraints,
+    ValidationError,
+)
 
+from app.ai.guardrails import suspicious_instruction
 from app.ai.llm.provider import ChatMessage, LLMError, LLMProvider
 from app.ai.prompts.intent import INTENT_PROMPT
+from app.core.http import validate_public_text
 from app.modules.catalog.schemas import ProductFilters
 
 
@@ -28,7 +38,11 @@ class IntentQuery(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     intent: Intent
-    query: Annotated[str, StringConstraints(strip_whitespace=True, max_length=512)] = ""
+    query: Annotated[
+        str,
+        StringConstraints(strip_whitespace=True, max_length=512),
+        AfterValidator(validate_public_text),
+    ] = ""
     filters: ProductFilters = Field(default_factory=ProductFilters)
     use_case: str | None = Field(default=None, max_length=100)
     alternative: Literal["cheaper", "similar"] | None = None
@@ -131,6 +145,8 @@ class IntentResolver:
         self.chain = INTENT_PROMPT | RunnableLambda(self._predict) if provider else None
 
     async def resolve(self, message: str) -> IntentQuery:
+        if suspicious_instruction(message):
+            return IntentQuery(intent=Intent.UNSUPPORTED_REQUEST)
         try:
             fallback = infer_intent(message)
         except ArithmeticError:
@@ -138,9 +154,10 @@ class IntentResolver:
         if self.chain is None:
             return fallback
         try:
-            result = await self.chain.ainvoke(
-                {"message": message, "categories": ", ".join(slug for slug, _ in _CATEGORIES)}
-            )
+            with tracing_context(enabled=False):
+                result = await self.chain.ainvoke(
+                    {"message": message, "categories": ", ".join(slug for slug, _ in _CATEGORIES)}
+                )
             filters = result.filters.model_dump(exclude_none=True, exclude_defaults=True)
             explicit = fallback.filters.model_dump(exclude_none=True, exclude_defaults=True)
             if "spec" in explicit:
