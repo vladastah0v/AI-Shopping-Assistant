@@ -74,7 +74,9 @@ class PageQuery(BaseModel):
     offset: int = Field(default=0, ge=0, le=2**31 - 1, description="Число записей перед страницей.")
 
 
-class ProductQuery(PageQuery):
+class ProductFilters(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     category_id: UUID | None = Field(
         default=None, description="UUID категории. Подкатегории включаются."
     )
@@ -95,7 +97,6 @@ class ProductQuery(PageQuery):
     in_stock: bool | None = Field(
         default=None, description="true — в наличии, false — без остатка."
     )
-    sort: ProductSort = Field(default="name_asc", description="Порядок сортировки товаров.")
     spec: list[Annotated[str, Field(max_length=160)]] = Field(
         default_factory=list,
         max_length=12,
@@ -121,13 +122,20 @@ class ProductQuery(PageQuery):
 
     @property
     def price_currency(self) -> str | None:
-        if self.currency is None and (
-            self.min_price is not None
-            or self.max_price is not None
-            or self.sort in ("price_asc", "price_desc")
-        ):
+        if self.currency is None and (self.min_price is not None or self.max_price is not None):
             return "RUB"
         return self.currency
+
+
+class ProductQuery(PageQuery, ProductFilters):
+    sort: ProductSort = Field(default="name_asc", description="Порядок сортировки товаров.")
+
+    @property
+    def price_currency(self) -> str | None:
+        currency = super().price_currency
+        if currency is None and self.sort in ("price_asc", "price_desc"):
+            return "RUB"
+        return currency
 
 
 class CatalogPage[T](BaseModel):

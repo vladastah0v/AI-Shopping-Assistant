@@ -7,7 +7,7 @@ from sqlalchemy.orm import joinedload
 from sqlalchemy.sql.elements import ColumnElement
 
 from app.modules.catalog.models import Brand, Category, Product
-from app.modules.catalog.schemas import PageQuery, ProductQuery, SpecificationFilter
+from app.modules.catalog.schemas import PageQuery, ProductFilters, ProductQuery, SpecificationFilter
 
 _PRODUCT_SORTS = {
     "name_asc": Product.name.asc(),
@@ -31,41 +31,42 @@ async def list_brands(session: AsyncSession, query: PageQuery) -> Sequence[Brand
 
 
 async def list_products(session: AsyncSession, query: ProductQuery) -> Sequence[Product]:
-    statement = _visible_products()
-    if query.category_id is not None or query.category_slug is not None:
-        statement = statement.where(Product.category_id.in_(_category_ids(query)))
-    if query.brand_id is not None:
-        statement = statement.where(Product.brand_id == query.brand_id)
-    currency = query.price_currency
-    if currency is not None:
-        statement = statement.where(Product.currency == currency)
-    if query.min_price is not None:
-        statement = statement.where(Product.price >= query.min_price)
-    if query.max_price is not None:
-        statement = statement.where(Product.price <= query.max_price)
-    if query.in_stock is not None:
-        stock_filter = Product.stock_quantity > 0 if query.in_stock else Product.stock_quantity == 0
-        statement = statement.where(stock_filter)
-    for specification in query.specification_filters:
-        statement = statement.where(_specification_condition(specification))
+    statement = _product_cards().where(*product_conditions(query))
     statement = statement.order_by(_PRODUCT_SORTS[query.sort], Product.id)
     return await _fetch_page(session, statement, query)
+
+
+def product_conditions(filters: ProductFilters) -> list[ColumnElement[bool]]:
+    conditions: list[ColumnElement[bool]] = [Product.is_active.is_(True)]
+    if filters.category_id is not None or filters.category_slug is not None:
+        conditions.append(Product.category_id.in_(_category_ids(filters)))
+    if filters.brand_id is not None:
+        conditions.append(Product.brand_id == filters.brand_id)
+    currency = filters.price_currency
+    if currency is not None:
+        conditions.append(Product.currency == currency)
+    if filters.min_price is not None:
+        conditions.append(Product.price >= filters.min_price)
+    if filters.max_price is not None:
+        conditions.append(Product.price <= filters.max_price)
+    if filters.in_stock is not None:
+        conditions.append(
+            Product.stock_quantity > 0 if filters.in_stock else Product.stock_quantity == 0
+        )
+    conditions.extend(map(_specification_condition, filters.specification_filters))
+    return conditions
 
 
 async def get_products_by_id(
     session: AsyncSession, product_ids: Sequence[UUID]
 ) -> dict[UUID, Product]:
-    statement = _visible_products().where(Product.id.in_(product_ids))
+    statement = _product_cards().where(Product.is_active.is_(True), Product.id.in_(product_ids))
     return {product.id: product for product in await session.scalars(statement)}
 
 
-def _visible_products() -> Select[tuple[Product]]:
-    return (
-        select(Product)
-        .where(Product.is_active.is_(True))
-        .options(
-            joinedload(Product.category, innerjoin=True), joinedload(Product.brand, innerjoin=True)
-        )
+def _product_cards() -> Select[tuple[Product]]:
+    return select(Product).options(
+        joinedload(Product.category, innerjoin=True), joinedload(Product.brand, innerjoin=True)
     )
 
 
@@ -75,7 +76,7 @@ async def _fetch_page[T](
     return (await session.scalars(statement.offset(query.offset).limit(query.limit + 1))).all()
 
 
-def _category_ids(query: ProductQuery) -> Select[tuple[UUID]]:
+def _category_ids(query: ProductFilters) -> Select[tuple[UUID]]:
     root = select(Category.id)
     if query.category_id is not None:
         root = root.where(Category.id == query.category_id)

@@ -3,12 +3,26 @@ from typing import Any
 from uuid import UUID
 
 from pgvector.sqlalchemy import VECTOR
-from sqlalchemy import CheckConstraint, DateTime, ForeignKey, String, Text, UniqueConstraint, func
+from sqlalchemy import (
+    CheckConstraint,
+    DateTime,
+    ForeignKey,
+    Index,
+    String,
+    Table,
+    Text,
+    UniqueConstraint,
+    and_,
+    func,
+)
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
+from app.ai.embeddings.huggingface import E5_SMALL
 from app.ai.embeddings.service import EMBEDDING_DIMENSIONS
 from app.core.database import Base
+
+EMBEDDINGS_LOCK_KEY = "shopping_assistant.embeddings"
 
 
 class ProductEmbedding(Base):
@@ -59,3 +73,26 @@ class DocumentChunk(Base):
     chunk_metadata: Mapped[dict[str, Any]] = mapped_column("metadata", JSONB)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+HNSW_INDEXES = (
+    (ProductEmbedding.__table__, "ix_product_embeddings_hnsw_cosine"),
+    (DocumentChunk.__table__, "ix_document_chunks_hnsw_cosine"),
+)
+
+
+def hnsw_index(table: Table, name: str, model: str, version: str) -> Index:
+    return Index(
+        name,
+        table.c.embedding,
+        postgresql_using="hnsw",
+        postgresql_ops={"embedding": "vector_cosine_ops"},
+        postgresql_with={"m": 16, "ef_construction": 64},
+        postgresql_where=and_(
+            table.c.embedding_model == model, table.c.embedding_version == version
+        ),
+    )
+
+
+for _table, _name in HNSW_INDEXES:
+    hnsw_index(_table, _name, E5_SMALL.model, E5_SMALL.version)

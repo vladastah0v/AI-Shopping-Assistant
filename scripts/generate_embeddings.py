@@ -3,12 +3,13 @@ import os
 from argparse import ArgumentParser
 
 from asyncpg import PostgresError
-from sqlalchemy import text
+from sqlalchemy import func, select
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 from sqlalchemy.pool import NullPool
 
 from app.ai.embeddings.huggingface import SentenceTransformersProvider
+from app.ai.embeddings.models import EMBEDDINGS_LOCK_KEY
 from app.ai.embeddings.pipeline import Chunking, GenerationResult, generate_embeddings
 from app.ai.embeddings.service import EmbeddingService
 from app.core.config import Settings
@@ -27,9 +28,7 @@ async def run(
         async with engine.connect() as connection:
             # Closing the physical connection releases the session advisory lock.
             acquired = await connection.scalar(
-                text(
-                    "SELECT pg_try_advisory_lock(hashtextextended('shopping_assistant.embeddings', 0))"
-                )
+                select(func.pg_try_advisory_lock(func.hashtextextended(EMBEDDINGS_LOCK_KEY, 0)))
             )
             await connection.commit()
             if not acquired:

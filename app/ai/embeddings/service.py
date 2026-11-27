@@ -45,6 +45,15 @@ def document_text(title: str, content: str) -> str:
     return " ".join(f"{title}. {content}".split())
 
 
+def validate_vector(values: Sequence[float], dimensions: int) -> Vector:
+    vector = tuple(float(value) for value in values)
+    if len(vector) != dimensions:
+        raise ValueError(f"Размерность вектора должна составлять {dimensions}.")
+    if not all(isfinite(value) for value in vector) or not any(vector):
+        raise ValueError("Для косинусной метрики нужен ненулевой вектор с конечными числами.")
+    return vector
+
+
 class EmbeddingService:
     def __init__(self, provider: EmbeddingProvider, *, batch_size: int = 8, cache_size: int = 128):
         if not 1 <= batch_size <= 64 or not 0 <= cache_size <= 2048:
@@ -88,7 +97,8 @@ class EmbeddingService:
                 if len(raw) != len(missing):
                     raise ValueError("Провайдер вернул неверное число векторов.")
                 generated = {
-                    key: self._validate(vector) for key, vector in zip(missing, raw, strict=True)
+                    key: validate_vector(vector, self.space.dimensions)
+                    for key, vector in zip(missing, raw, strict=True)
                 }
                 cached.update(generated)
                 for key, vector in generated.items():
@@ -98,11 +108,3 @@ class EmbeddingService:
                         self._cache.popitem(last=False)
             vectors.extend(cached[key] for key, _ in keyed)
         return vectors
-
-    def _validate(self, values: Sequence[float]) -> Vector:
-        vector = tuple(float(value) for value in values)
-        if len(vector) != self.space.dimensions:
-            raise ValueError(f"Размерность вектора должна составлять {self.space.dimensions}.")
-        if not all(isfinite(value) for value in vector) or not any(vector):
-            raise ValueError("Для косинусной метрики нужен ненулевой вектор с конечными числами.")
-        return vector
