@@ -7,6 +7,7 @@ from app.core.config import Settings
 from app.core.database import create_database_engine
 from app.core.redis import create_redis_client
 from app.health import router as health_router
+from app.modules.catalog.router import router as catalog_router
 
 
 def create_app(settings: Settings | None = None) -> FastAPI:
@@ -31,6 +32,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         lifespan=lifespan,
     )
     application.include_router(health_router)
+    application.include_router(catalog_router)
     return application
 
 
