@@ -217,6 +217,7 @@ async def test_postgres_uses_fts_and_sku_indexes(
     keyword_catalog: KeywordCatalog,
 ) -> None:
     await session.execute(text("SET LOCAL enable_seqscan = off"))
+    await session.execute(text("SET LOCAL enable_indexscan = off"))
     connection = await session.connection()
     statements = (
         (

@@ -34,6 +34,9 @@ class Settings(BaseSettings):
     ollama_max_tokens: int = Field(default=512, ge=32, le=4096)
     ollama_context_tokens: int = Field(default=4096, ge=2048, le=32768)
 
+    chat_session_ttl_seconds: int = Field(default=86400, ge=60, le=604800)
+    chat_history_limit: int = Field(default=12, ge=2, le=50)
+
     @property
     def database_url(self) -> URL:
         return URL.create(
