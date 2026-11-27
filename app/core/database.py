@@ -1,11 +1,24 @@
 import asyncio
 
 from asyncpg import PostgresError
-from sqlalchemy import text
+from sqlalchemy import MetaData, text
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
+from sqlalchemy.orm import DeclarativeBase
 
 from app.core.config import Settings
+
+
+class Base(DeclarativeBase):
+    metadata = MetaData(
+        naming_convention={
+            "pk": "pk_%(table_name)s",
+            "fk": "fk_%(table_name)s_%(column_0_name)s_%(referred_table_name)s",
+            "uq": "uq_%(table_name)s_%(column_0_name)s",
+            "ck": "ck_%(table_name)s_%(constraint_name)s",
+            "ix": "ix_%(table_name)s_%(column_0_name)s",
+        }
+    )
 
 
 def create_database_engine(settings: Settings) -> AsyncEngine:

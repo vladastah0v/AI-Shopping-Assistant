@@ -7,6 +7,7 @@ from sqlalchemy.ext.asyncio import create_async_engine
 from sqlalchemy.pool import NullPool
 
 from app.core.config import Settings
+from app.modules.catalog import models as catalog_models
 
 config = context.config
 if config.config_file_name is not None:
@@ -18,13 +19,14 @@ def run_migrations_offline() -> None:
         dialect_name="postgresql",
         literal_binds=True,
         dialect_opts={"paramstyle": "named"},
+        target_metadata=catalog_models.Base.metadata,
     )
     with context.begin_transaction():
         context.run_migrations()
 
 
 def run_migrations(connection: Connection) -> None:
-    context.configure(connection=connection)
+    context.configure(connection=connection, target_metadata=catalog_models.Base.metadata)
     with context.begin_transaction():
         context.run_migrations()
 
