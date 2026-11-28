@@ -68,24 +68,18 @@ docker compose run --rm migrate alembic check
 
 Миграция `0005` добавляет вычисляемые поля `search_vector` в товары и товарные документы, GIN-индексы по этим полям и B-tree по `products.search_sku`. При применении миграции PostgreSQL заполняет поля для существующих строк. Изменения исходного текста автоматически отражаются в индексах в той же транзакции. [Состав полей и правила поиска](keyword-search.md).
 
+## Диалоги и ревизия каталога
+
+Миграция `0006` добавляет `chat_sessions` и `chat_messages` с привязкой сообщения к сессии. Удаление сессии удаляет историю. Миграция `0007` хранит оценки в `feedback`, показанные товары в `recommendation_history` и технические параметры в `llm_requests`. Миграция `0008` добавляет `catalog_revision`, которую PostgreSQL обновляет вместе с данными каталога. Роль API получает права записи на таблицы диалога по назначению и читает ревизию. [Сессии](conversations.md) · [Инвалидация кэша](redis.md).
+
 ## Интеграционные проверки
 
-Для проверок каталога запустите отдельный проект Compose. Публикация порта PostgreSQL в примере действует только для тестового окружения и привязана к loopback.
+Полный набор запускается командой `./scripts/ci_checks.sh`. Скрипт создаёт изолированный проект Compose, назначает свободные локальные порты, применяет миграции и использует случайные тестовые пароли.
+
+При работе с уже подготовленным тестовым стеком задайте `SHOPPING_TEST_DATABASE_URL` для роли миграций, `SHOPPING_TEST_APP_DATABASE_URL` для роли API, `SHOPPING_TEST_REDIS_URL` для Redis и `SHOPPING_TEST_BASE_URL` для HTTP. Пароли со специальными символами требуют процентного кодирования в URL.
 
 ```bash
-API_PORT=18000 docker compose -p ai-shopping-assistant-catalog-test \
-  -f docker-compose.yml -f - up --build --wait <<'YAML'
-services:
-  postgres:
-    ports:
-      - "127.0.0.1:55432:5432"
-YAML
+uv run --locked pytest --cov=app --cov-report=term-missing
 ```
 
-В `SHOPPING_TEST_DATABASE_URL` укажите пароль `POSTGRES_PASSWORD` из тестового окружения. В URL специальные символы пароля требуют процентного кодирования. Тесты каталога откатывают свои транзакции.
-
-```bash
-SHOPPING_TEST_BASE_URL=http://127.0.0.1:18000 \
-  SHOPPING_TEST_DATABASE_URL='postgresql+asyncpg://shopping_migrator:LOCAL_PASSWORD@127.0.0.1:55432/shopping_assistant' \
-  uv run --locked pytest --cov=app --cov-report=term-missing
-```
+[Автоматические проверки](ci.md).

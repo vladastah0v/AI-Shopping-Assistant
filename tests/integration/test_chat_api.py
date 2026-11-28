@@ -45,11 +45,11 @@ async def test_chat_turns_feedback_and_stream(session: AsyncSession) -> None:
             sku=f"CHAT-{uuid4().hex[:7]}-{index}",
             description="Универсальный ноутбук",
             price=price,
-            stock_quantity=2,
+            stock_quantity=0 if index == 4 else 2,
             specifications={"ram_gb": ram},
         )
         for index, (price, ram) in enumerate(
-            [(60_000, 32), (70_000, 32), (50_000, 8), (95_000, 32)]
+            [(60_000, 32), (70_000, 32), (50_000, 8), (95_000, 32), (65_000, 32)]
         )
     ]
     session.add_all(products)
@@ -75,7 +75,7 @@ async def test_chat_turns_feedback_and_stream(session: AsyncSession) -> None:
 
             first = await client.post(
                 f"{path}/messages",
-                json={"content": "Подбери ноутбук до 80 000 рублей"},
+                json={"content": "Подбери ноутбук до 80 000 рублей только в наличии"},
                 headers=owner,
             )
             assert first.status_code == 200
@@ -105,6 +105,25 @@ async def test_chat_turns_feedback_and_stream(session: AsyncSession) -> None:
             assert (await client.post("feedback", json=feedback, headers=owner)).json()[
                 "rating"
             ] == 5
+
+            unavailable_sku = products[4].sku
+            stock = await client.post(
+                f"{path}/messages",
+                json={"content": f"{unavailable_sku} есть в наличии?"},
+                headers=owner,
+            )
+            assert stock.status_code == 200
+            assert "нет в наличии" in stock.json()["answer"]
+            assert [item["sku"] for item in stock.json()["recommended_products"]] == [
+                unavailable_sku
+            ]
+            followup = await client.post(
+                f"{path}/messages", json={"content": "Подбери ноутбук"}, headers=owner
+            )
+            assert followup.status_code == 200
+            available = followup.json()["recommended_products"]
+            assert available and all(item["stock_quantity"] > 0 for item in available)
+
             assert (await client.delete(f"{path}/messages", headers=owner)).status_code == 204
             assert (await client.get(f"{path}/messages", headers=owner)).json() == []
             assert (await client.delete(path, headers=owner)).status_code == 204

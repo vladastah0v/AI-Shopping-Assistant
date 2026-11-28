@@ -62,6 +62,11 @@ _SPECS = (
     ("ssd_gb", re.compile(rf"(?:ssd|накопител[а-я]*)\s+(?P<amount>{_NUMBER})\s*(?P<tb>тб|гб)")),
     ("display_size_in", re.compile(rf"(?P<amount>{_NUMBER})\s*(?:дюйм|″)")),
 )
+_MAXIMUM_QUALIFIER = re.compile(r"\b(?:до|не более|не больше|не выше|максимум)\s*$")
+_MORE_RAM = re.compile(
+    r"(?<!не )\b(?:больше|большей|большим|побольше)(?:\s+\w+){0,2}\s+(?:оперативн|озу\b|ram\b)"
+    r"|\b(?:озу|ram)\s+(?:нужно\s+)?(?:больше|побольше)\b"
+)
 _CATEGORIES = (
     ("laptops", r"ноутбук"),
     ("smartphones", r"смартфон|телефон"),
@@ -80,7 +85,8 @@ _PURPOSES = (
     ("игры", r"игр[а-я]*|гейм"),
     ("фотография", r"фотограф|съемк"),
     ("учёба", r"учеб|студен"),
-    ("офис", r"офис|документ"),
+    ("документы", r"документ"),
+    ("офис", r"офис"),
     ("видеомонтаж", r"монтаж"),
 )
 _INTENT_RULES = (
@@ -122,6 +128,8 @@ def infer_intent(message: str) -> IntentQuery:
         if match := pattern.search(normalized):
             value = _amount(match["amount"]) * (1024 if match.groupdict().get("tb") == "тб" else 1)
             operator = "eq" if key == "display_size_in" else "gte"
+            if _MAXIMUM_QUALIFIER.search(normalized[: match.start("amount")]):
+                operator = "lte"
             specs.append(f"{key}:{operator}:{value:f}")
     filters["spec"] = list(dict.fromkeys(specs))
     if intent == Intent.CLARIFICATION and (budget or specs):
@@ -134,10 +142,7 @@ def infer_intent(message: str) -> IntentQuery:
     alternative = None
     if re.search(r"дешевле|подешевле|менее дорог", normalized):
         alternative = "cheaper"
-    more_ram = (
-        re.search(r"больш[а-я]*|побольш[а-я]*", normalized) is not None
-        and re.search(r"оперативн|oзу|озу|ram", normalized) is not None
-    )
+    more_ram = _MORE_RAM.search(normalized) is not None
     if alternative is None and (
         more_ram or re.search(r"альтернатив|похож|такой же|такая же", normalized)
     ):
@@ -188,7 +193,7 @@ class IntentResolver:
                 ] + explicit["spec"]
             filters.update({key: value for key, value in explicit.items() if key != "spec"})
             return IntentQuery(
-                intent=result.intent,
+                intent=fallback.intent if fallback.more_ram else result.intent,
                 query=result.query or fallback.query,
                 filters=ProductFilters.model_validate(filters),
                 use_case=result.use_case or fallback.use_case,

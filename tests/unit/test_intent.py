@@ -15,6 +15,7 @@ def test_extracts_constraints_and_catalog_codes() -> None:
     assert request.filters.max_price == Decimal("80000")
     assert request.filters.spec == ["ram_gb:gte:32", "ssd_gb:gte:1024"]
     assert request.query == "программирование"
+    assert infer_intent("Подбери ноутбук для работы с документами").query == "документы"
     television = infer_intent("Найди телевизор 55 дюймов в наличии")
     assert television.filters.category_slug == "televisions"
     assert television.filters.spec == ["display_size_in:eq:55"]
@@ -54,3 +55,7 @@ def test_relative_ram_request_keeps_alternative_intent() -> None:
     assert request.intent == Intent.RECOMMENDATION
     assert request.alternative == "similar"
     assert request.more_ram
+
+    ceiling = infer_intent("Подбери ноутбук с не больше 16 ГБ ОЗУ")
+    assert ceiling.filters.spec == ["ram_gb:lte:16"]
+    assert ceiling.alternative is None

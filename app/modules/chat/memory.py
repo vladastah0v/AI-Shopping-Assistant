@@ -19,7 +19,7 @@ class SessionMemory(BaseModel):
 _ORDINALS = re.compile(r"\b(перв[а-я]+|втор[а-я]+|трет[а-я]+|четв[её]рт[а-я]+|пят[а-я]+)\b", re.I)
 _ORDINAL_PREFIXES = ("перв", "втор", "трет", "четв", "пят")
 _UUID = re.compile(r"\b[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}\b", re.I)
-_LOOKUPS = {
+LOOKUP_INTENTS = {
     Intent.PRODUCT_COMPARISON,
     Intent.PRODUCT_INFORMATION,
     Intent.PRICE_CHECK,
@@ -31,7 +31,7 @@ def referenced_products(message: str, request: IntentQuery, state: SessionMemory
     explicit = list(dict.fromkeys(UUID(match) for match in _UUID.findall(message)))[:5]
     if explicit:
         return explicit
-    if request.intent not in _LOOKUPS and request.alternative is None:
+    if request.intent not in LOOKUP_INTENTS and request.alternative is None:
         return []
     positions = [
         next(

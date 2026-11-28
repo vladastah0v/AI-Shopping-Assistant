@@ -10,7 +10,7 @@ from app.ai.intent import Intent, IntentResolver
 from app.ai.rag.schemas import RagAnswer
 from app.ai.rag.service import RagService
 from app.modules.catalog.models import Product
-from app.modules.chat.memory import SessionMemory, merge_intent, referenced_products
+from app.modules.chat.memory import LOOKUP_INTENTS, SessionMemory, merge_intent, referenced_products
 from app.modules.chat.models import (
     ChatMessageRecord,
     ChatSession,
@@ -22,14 +22,7 @@ from app.modules.chat.schemas import ChatReply, FeedbackCreate, FeedbackRead
 from app.modules.chat.store import SessionStore
 
 _SKU = re.compile(r"\b[a-z0-9]{2,}(?:-[a-z0-9]+)*-\d[a-z0-9-]*\b", re.I)
-_CATALOG_INTENTS = {
-    Intent.PRODUCT_SEARCH,
-    Intent.RECOMMENDATION,
-    Intent.PRODUCT_COMPARISON,
-    Intent.PRODUCT_INFORMATION,
-    Intent.STOCK_CHECK,
-    Intent.PRICE_CHECK,
-}
+_CATALOG_INTENTS = LOOKUP_INTENTS | {Intent.PRODUCT_SEARCH, Intent.RECOMMENDATION}
 
 
 class ChatService:
@@ -75,22 +68,24 @@ class ChatService:
             ):
                 request = request.model_copy(update={"intent": Intent.PRODUCT_INFORMATION})
             effective = request
-            if ids and request.intent == Intent.STOCK_CHECK:
+            point_lookup = (
+                bool(ids) and request.alternative is None and request.intent in LOOKUP_INTENTS
+            )
+            if point_lookup and request.intent == Intent.STOCK_CHECK:
                 effective = request.model_copy(
                     update={"filters": request.filters.model_copy(update={"in_stock": None})}
                 )
             answer = await self.rag.answer(db, effective, product_ids=ids)
-            if request.intent in _CATALOG_INTENTS:
+            if request.intent in _CATALOG_INTENTS and not point_lookup:
                 state = SessionMemory(
-                    filters=effective.filters
-                    if request.intent == Intent.STOCK_CHECK
-                    else request.filters,
+                    filters=request.filters,
                     query=request.query,
                     use_case=request.use_case,
                     preference=request.alternative or state.preference,
-                    product_ids=[product.id for product in answer.recommended_products]
-                    or state.product_ids,
+                    product_ids=state.product_ids,
                 )
+            if answer.recommended_products:
+                state.product_ids = [product.id for product in answer.recommended_products]
 
         position = row.revision * 2 + 1
         self.store.update(row, state)
